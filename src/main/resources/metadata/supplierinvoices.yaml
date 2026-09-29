@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.supplierinvoices
+name: "supplierinvoices"
+title: "Supplier Invoices"
+description: "Tasks for retrieving and managing Pennylane supplier invoices."
+body: "Query, filter, and process supplier invoices and payment details in Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

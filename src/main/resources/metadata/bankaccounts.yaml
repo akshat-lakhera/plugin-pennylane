@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.bankaccounts
+name: "bankaccounts"
+title: "Master Data - Bank Accounts"
+description: "Tasks for querying and managing Pennylane bank accounts."
+body: "Retrieve bank accounts and real-time ledger balances from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

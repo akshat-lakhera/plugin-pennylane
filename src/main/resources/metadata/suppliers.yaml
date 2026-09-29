@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.suppliers
+name: "suppliers"
+title: "Master Data - Suppliers"
+description: "Tasks for querying and managing Pennylane suppliers."
+body: "Retrieve vendor and supplier master data from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

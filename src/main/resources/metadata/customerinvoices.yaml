@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.customerinvoices
+name: "customerinvoices"
+title: "Customer Invoices"
+description: "Tasks for retrieving and managing Pennylane customer invoices."
+body: "Query, filter, and track customer invoices and credit notes in Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

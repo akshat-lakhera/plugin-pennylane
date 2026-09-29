@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.customers
+name: "customers"
+title: "Master Data - Customers"
+description: "Tasks for querying and managing Pennylane customers."
+body: "Retrieve customer and client master data from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

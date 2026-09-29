@@ -1,8 +1,8 @@
 group: io.kestra.plugin.pennylane
 name: "pennylane"
 title: "Pennylane"
-description: "Pennylane plugin for Kestra"
-body: ""
+description: "Tasks for orchestrating accounting, supplier and customer invoicing, bank transactions, and master data in Pennylane."
+body: "Connect Kestra with Pennylane to query and manage invoices, transactions, suppliers, customers, and bank accounts."
 videos: []
 createdBy: "Kestra Core Team"
 managedBy: "Kestra Core Team"

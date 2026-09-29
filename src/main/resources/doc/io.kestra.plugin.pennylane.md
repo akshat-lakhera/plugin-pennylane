@@ -1,16 +1,19 @@
-This is the Kestra plugin template. Use it as a starting point for building a new plugin.
+Pennylane is a leading European cloud accounting, financial management, and invoicing SaaS platform.
+This plugin enables end-to-end automation with Pennylane by orchestrating supplier invoices, customer invoices, bank transactions, and master data entities.
 
-## What this template ships
+## Authentication
 
-- `Example` is a sample `RunnableTask` that reverses an input string.
-- `Trigger` is a sample polling trigger that fires an execution at random.
+Authentication against the Pennylane API is handled via an API token generated in your company or firm settings:
+- Provide your token via the `apiToken` property (recommended: use `{{ secret('PENNYLANE_API_TOKEN') }}`).
+- The base URL defaults to `https://app.pennylane.com/api/external/v2` and can be overridden via `baseUrl`.
 
-## How to build your plugin
+## Core Features
 
-1. Rename the package `io.kestra.plugin.pennylane` to your own, for example `io.kestra.plugin.myservice`.
-2. Update `group`, `name`, `title`, and `description` in `src/main/resources/metadata/index.yaml`.
-3. Replace `src/main/resources/icons/plugin-icon.svg` with your service's icon.
-4. Replace the `Example` and `Trigger` classes with your real tasks and triggers.
-5. Replace this how-to with documentation for your plugin.
-
-Run `./gradlew lintPluginDocs` before pushing to validate the plugin documentation.
+- **Cursor-based Pagination**: Automatically pages through multi-page result sets until all records are retrieved, with optional caps via `maxRecords`.
+- **Flexible Ingestion Modes (`fetchType`)**:
+  - `FETCH`: In-memory list available as `{{ outputs.taskId.rows }}`.
+  - `FETCH_ONE`: Single item available as `{{ outputs.taskId.row }}`.
+  - `STORE`: Streams items directly into Kestra internal storage (`.ion` format) for large-volume batch workflows.
+  - `NONE`: Counts records without retaining them in memory.
+- **Resilient Rate Limiting**: Built-in exponential backoff and `Retry-After` header parsing gracefully handles HTTP 429 rate limits.
+- **Rich Querying & Filtering**: Supports Pennylane's filter DSL as well as typed properties (`dateFrom`, `dateTo`, `supplierId`, `customerId`, `paymentStatus`, etc.).

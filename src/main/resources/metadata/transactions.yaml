@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.transactions
+name: "transactions"
+title: "Transactions"
+description: "Tasks for retrieving and managing Pennylane bank transactions."
+body: "Query and monitor bank transactions and account movements from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

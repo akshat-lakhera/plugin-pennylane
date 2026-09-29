@@ -1,7 +1,7 @@
 @PluginSubGroup(
     title = "Pennylane",
     description = "Pennylane plugin for Kestra",
-    categories = PluginSubGroup.PluginCategory.DATA
+    categories = {PluginSubGroup.PluginCategory.BUSINESS, PluginSubGroup.PluginCategory.DATA}
 )
 package io.kestra.plugin.pennylane;
 
