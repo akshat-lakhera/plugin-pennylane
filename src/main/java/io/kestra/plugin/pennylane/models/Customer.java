@@ -21,51 +21,51 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Customer {
 
-    @Schema(title = "Customer unique identifier.")
+    @Schema(title = "Customer unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Customer name.")
+    @Schema(title = "Customer name")
     @JsonProperty("name")
     private String name;
 
-    @Schema(title = "Customer type ('company' or 'individual').")
+    @Schema(title = "Customer type ('company' or 'individual')")
     @JsonProperty("customer_type")
     private String customerType;
 
-    @Schema(title = "List of customer email addresses.")
+    @Schema(title = "List of customer email addresses")
     @JsonProperty("emails")
     private List<String> emails;
 
-    @Schema(title = "List of customer phone numbers.")
+    @Schema(title = "List of customer phone numbers")
     @JsonProperty("phone_numbers")
     private List<String> phoneNumbers;
 
-    @Schema(title = "Address line.")
+    @Schema(title = "Address line")
     @JsonProperty("address")
     private String address;
 
-    @Schema(title = "Postal code.")
+    @Schema(title = "Postal code")
     @JsonProperty("postal_code")
     private String postalCode;
 
-    @Schema(title = "City name.")
+    @Schema(title = "City name")
     @JsonProperty("city")
     private String city;
 
-    @Schema(title = "Two-letter ISO country code.")
+    @Schema(title = "Two-letter ISO country code")
     @JsonProperty("country_alpha2")
     private String countryAlpha2;
 
-    @Schema(title = "VAT identification number.")
+    @Schema(title = "VAT identification number")
     @JsonProperty("vat_number")
     private String vatNumber;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

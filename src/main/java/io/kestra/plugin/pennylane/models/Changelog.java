@@ -20,19 +20,19 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Changelog {
 
-    @Schema(title = "Changelog event unique identifier.")
+    @Schema(title = "Changelog event unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Action performed on the resource: 'create', 'update', or 'delete'.")
+    @Schema(title = "Action performed on the resource: 'create', 'update', or 'delete'")
     @JsonProperty("action")
     private String action;
 
-    @Schema(title = "Identifier of the affected resource.")
+    @Schema(title = "Identifier of the affected resource")
     @JsonProperty("resource_id")
     private Long resourceId;
 
-    @Schema(title = "Timestamp of the change event.")
+    @Schema(title = "Timestamp of the change event")
     @JsonProperty("updated_at")
     private String updatedAt;
 

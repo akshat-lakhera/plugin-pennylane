@@ -20,71 +20,71 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CustomerInvoice {
 
-    @Schema(title = "Customer invoice unique identifier.")
+    @Schema(title = "Customer invoice unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Customer invoice label.")
+    @Schema(title = "Customer invoice label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Customer invoice number.")
+    @Schema(title = "Customer invoice number")
     @JsonProperty("invoice_number")
     private String invoiceNumber;
 
-    @Schema(title = "Currency code (e.g. 'EUR', 'USD').")
+    @Schema(title = "Currency code (e.g. 'EUR', 'USD')")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Invoice issue date (YYYY-MM-DD).")
+    @Schema(title = "Invoice issue date (YYYY-MM-DD)")
     @JsonProperty("date")
     private String date;
 
-    @Schema(title = "Invoice payment deadline (YYYY-MM-DD).")
+    @Schema(title = "Invoice payment deadline (YYYY-MM-DD)")
     @JsonProperty("deadline")
     private String deadline;
 
-    @Schema(title = "Whether the invoice is in draft state.")
+    @Schema(title = "Whether the invoice is in draft state")
     @JsonProperty("draft")
     private Boolean draft;
 
-    @Schema(title = "Whether this document is a credit note.")
+    @Schema(title = "Whether this document is a credit note")
     @JsonProperty("credit_note")
     private Boolean creditNote;
 
-    @Schema(title = "Whether the invoice has been fully paid.")
+    @Schema(title = "Whether the invoice has been fully paid")
     @JsonProperty("paid")
     private Boolean paid;
 
-    @Schema(title = "Total invoice amount including tax in euros.")
+    @Schema(title = "Total invoice amount including tax in euros")
     @JsonProperty("amount")
     private Object amount;
 
-    @Schema(title = "Total invoice amount in document currency.")
+    @Schema(title = "Total invoice amount in document currency")
     @JsonProperty("currency_amount")
     private Object currencyAmount;
 
-    @Schema(title = "Tax / VAT amount in euros.")
+    @Schema(title = "Tax / VAT amount in euros")
     @JsonProperty("tax")
     private Object tax;
 
-    @Schema(title = "Tax / VAT amount in document currency.")
+    @Schema(title = "Tax / VAT amount in document currency")
     @JsonProperty("currency_tax")
     private Object currencyTax;
 
-    @Schema(title = "Customer reference summary.")
+    @Schema(title = "Customer reference summary")
     @JsonProperty("customer")
     private Map<String, Object> customer;
 
-    @Schema(title = "Public temporary download URL for the invoice PDF.")
+    @Schema(title = "Public temporary download URL for the invoice PDF")
     @JsonProperty("public_file_url")
     private String publicFileUrl;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

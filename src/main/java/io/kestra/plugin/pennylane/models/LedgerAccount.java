@@ -20,31 +20,31 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LedgerAccount {
 
-    @Schema(title = "Ledger account unique identifier.")
+    @Schema(title = "Ledger account unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Ledger account number (e.g. '411000').")
+    @Schema(title = "Ledger account number (e.g. '411000')")
     @JsonProperty("number")
     private String number;
 
-    @Schema(title = "Ledger account label.")
+    @Schema(title = "Ledger account label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Whether this account is enabled.")
+    @Schema(title = "Whether this account is enabled")
     @JsonProperty("enabled")
     private Boolean enabled;
 
-    @Schema(title = "Account currency code.")
+    @Schema(title = "Account currency code")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

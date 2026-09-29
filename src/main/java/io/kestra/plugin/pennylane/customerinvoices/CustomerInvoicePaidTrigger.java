@@ -145,30 +145,47 @@ public class CustomerInvoicePaidTrigger extends AbstractTrigger implements Polli
             return Optional.empty();
         }
 
-        // Fetch the full invoice for the most recent changelog entry and check paid status
+        // Inspect recent changelog entries for paid invoices with bounded inspection depth
         CustomerInvoice paidInvoice = null;
+        int inspected = 0;
+        int maxInspections = 20;
+
         for (Changelog change : changes) {
+            String action = change.getAction();
+            if (action != null && (action.equalsIgnoreCase("delete") || action.equalsIgnoreCase("deleted"))) {
+                continue;
+            }
+
             Long invoiceId = change.getResourceId();
             if (invoiceId == null) {
                 continue;
             }
 
-            String invoiceUrl = AbstractPennylaneTask.join(baseUrlStr, "customer_invoices/" + invoiceId);
-            var invoiceRequest = HttpRequest.builder()
-                .uri(URI.create(invoiceUrl))
-                .method("GET");
-
-            CustomerInvoice invoice = AbstractPennylaneTask.request(
-                runContext,
-                null,
-                token,
-                invoiceRequest,
-                CustomerInvoice.class
-            ).getBody();
-
-            if (invoice != null && Boolean.TRUE.equals(invoice.getPaid())) {
-                paidInvoice = invoice;
+            if (++inspected > maxInspections) {
+                runContext.logger().debug("Reached maximum inspection depth of {} changelog entries", maxInspections);
                 break;
+            }
+
+            try {
+                String invoiceUrl = AbstractPennylaneTask.join(baseUrlStr, "customer_invoices/" + invoiceId);
+                var invoiceRequest = HttpRequest.builder()
+                    .uri(URI.create(invoiceUrl))
+                    .method("GET");
+
+                CustomerInvoice invoice = AbstractPennylaneTask.request(
+                    runContext,
+                    null,
+                    token,
+                    invoiceRequest,
+                    CustomerInvoice.class
+                ).getBody();
+
+                if (invoice != null && Boolean.TRUE.equals(invoice.getPaid())) {
+                    paidInvoice = invoice;
+                    break;
+                }
+            } catch (Exception e) {
+                runContext.logger().debug("Could not inspect customer invoice {}: {}", invoiceId, e.getMessage());
             }
         }
 
@@ -178,6 +195,7 @@ public class CustomerInvoicePaidTrigger extends AbstractTrigger implements Polli
 
         Map<String, Object> outputs = new LinkedHashMap<>();
         outputs.put("invoice", paidInvoice);
+        outputs.put("changeCount", changes.size());
 
         Execution execution = TriggerService.generateExecution(this, conditionContext, context, outputs);
 

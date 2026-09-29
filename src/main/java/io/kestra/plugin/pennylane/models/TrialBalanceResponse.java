@@ -22,7 +22,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TrialBalanceResponse {
 
-    @Schema(title = "List of ledger account trial balance rows for the requested period.")
+    @Schema(title = "List of ledger account trial balance rows for the requested period")
     @JsonProperty("ledger_accounts")
     @JsonAlias({"items", "ledger_accounts"})
     private List<TrialBalanceLine> ledgerAccounts;

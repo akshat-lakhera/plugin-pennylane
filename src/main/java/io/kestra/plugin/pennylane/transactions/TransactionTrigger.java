@@ -193,6 +193,7 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
 
         Map<String, Object> outputs = new LinkedHashMap<>();
         outputs.put("transaction", latest);
+        outputs.put("transactions", items);
         outputs.put("transactionCount", items.size());
 
         Execution execution = TriggerService.generateExecution(this, conditionContext, context, outputs);

@@ -20,23 +20,23 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Category {
 
-    @Schema(title = "Category unique identifier.")
+    @Schema(title = "Category unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Category label.")
+    @Schema(title = "Category label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Category group identifier this category belongs to.")
+    @Schema(title = "Category group identifier this category belongs to")
     @JsonProperty("category_group_id")
     private Long categoryGroupId;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

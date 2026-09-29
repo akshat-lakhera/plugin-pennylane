@@ -22,16 +22,16 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PennylanePage<T> {
 
-    @Schema(title = "Indicates whether additional results are available beyond this page.")
+    @Schema(title = "Indicates whether additional results are available beyond this page")
     @JsonProperty("has_more")
     @Builder.Default
     private Boolean hasMore = false;
 
-    @Schema(title = "Cursor to retrieve the next page of results.")
+    @Schema(title = "Cursor to retrieve the next page of results")
     @JsonProperty("next_cursor")
     private String nextCursor;
 
-    @Schema(title = "List of items returned for the current page.")
+    @Schema(title = "List of items returned for the current page")
     @JsonProperty("items")
     @Builder.Default
     private List<T> items = new ArrayList<>();

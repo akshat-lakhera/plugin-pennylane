@@ -20,55 +20,55 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class LedgerEntryLine {
 
-    @Schema(title = "Ledger entry line unique identifier.")
+    @Schema(title = "Ledger entry line unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Associated ledger entry identifier.")
+    @Schema(title = "Associated ledger entry identifier")
     @JsonProperty("ledger_entry_id")
     private Long ledgerEntryId;
 
-    @Schema(title = "Associated ledger account identifier.")
+    @Schema(title = "Associated ledger account identifier")
     @JsonProperty("ledger_account_id")
     private Long ledgerAccountId;
 
-    @Schema(title = "Debit amount in euros.")
+    @Schema(title = "Debit amount in euros")
     @JsonProperty("debit")
     private Object debit;
 
-    @Schema(title = "Credit amount in euros.")
+    @Schema(title = "Credit amount in euros")
     @JsonProperty("credit")
     private Object credit;
 
-    @Schema(title = "Currency code.")
+    @Schema(title = "Currency code")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Debit amount in document currency.")
+    @Schema(title = "Debit amount in document currency")
     @JsonProperty("currency_debit")
     private Object currencyDebit;
 
-    @Schema(title = "Credit amount in document currency.")
+    @Schema(title = "Credit amount in document currency")
     @JsonProperty("currency_credit")
     private Object currencyCredit;
 
-    @Schema(title = "Entry date (YYYY-MM-DD).")
+    @Schema(title = "Entry date (YYYY-MM-DD)")
     @JsonProperty("date")
     private String date;
 
-    @Schema(title = "Label / memo for this line.")
+    @Schema(title = "Label / memo for this line")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Lettering code used for account reconciliation.")
+    @Schema(title = "Lettering code used for account reconciliation")
     @JsonProperty("lettering")
     private String lettering;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

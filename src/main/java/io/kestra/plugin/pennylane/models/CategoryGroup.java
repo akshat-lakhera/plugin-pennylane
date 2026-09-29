@@ -20,19 +20,19 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class CategoryGroup {
 
-    @Schema(title = "Category group unique identifier.")
+    @Schema(title = "Category group unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Category group label.")
+    @Schema(title = "Category group label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

@@ -20,29 +20,29 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TrialBalanceLine {
 
-    @Schema(title = "Ledger account unique identifier.")
+    @Schema(title = "Ledger account unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Ledger account number.")
+    @Schema(title = "Ledger account number")
     @JsonProperty("number")
     @com.fasterxml.jackson.annotation.JsonAlias({"ledger_account_number", "number"})
     private String number;
 
-    @Schema(title = "Ledger account label.")
+    @Schema(title = "Ledger account label")
     @JsonProperty("label")
     @com.fasterxml.jackson.annotation.JsonAlias({"ledger_account_label", "label"})
     private String label;
 
-    @Schema(title = "Total debit amount for the period.")
+    @Schema(title = "Total debit amount for the period")
     @JsonProperty("debit")
     private Object debit;
 
-    @Schema(title = "Total credit amount for the period.")
+    @Schema(title = "Total credit amount for the period")
     @JsonProperty("credit")
     private Object credit;
 
-    @Schema(title = "Net balance (debit minus credit) for the period.")
+    @Schema(title = "Net balance (debit minus credit) for the period")
     @JsonProperty("balance")
     private Object balance;
 

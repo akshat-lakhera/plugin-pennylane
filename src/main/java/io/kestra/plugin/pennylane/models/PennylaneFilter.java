@@ -15,15 +15,15 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PennylaneFilter {
 
-    @Schema(title = "The field name to filter on, e.g. 'date', 'supplier_id', 'id'.")
+    @Schema(title = "The field name to filter on, e.g. 'date', 'supplier_id', 'id'")
     @JsonProperty("field")
     private String field;
 
-    @Schema(title = "The comparison operator: 'eq', 'not_eq', 'gt', 'gteq', 'lt', 'lteq', 'in', 'not_in'.")
+    @Schema(title = "The comparison operator: 'eq', 'not_eq', 'gt', 'gteq', 'lt', 'lteq', 'in', 'not_in'")
     @JsonProperty("operator")
     private String operator;
 
-    @Schema(title = "The target value or array of values to compare against.")
+    @Schema(title = "The target value or array of values to compare against")
     @JsonProperty("value")
     private Object value;
 }

@@ -20,39 +20,39 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BankAccount {
 
-    @Schema(title = "Bank account unique identifier.")
+    @Schema(title = "Bank account unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Account name / label.")
+    @Schema(title = "Account name / label")
     @JsonProperty("name")
     private String name;
 
-    @Schema(title = "International Bank Account Number (IBAN).")
+    @Schema(title = "International Bank Account Number (IBAN)")
     @JsonProperty("iban")
     private String iban;
 
-    @Schema(title = "Bank Identifier Code (BIC / SWIFT).")
+    @Schema(title = "Bank Identifier Code (BIC / SWIFT)")
     @JsonProperty("bic")
     private String bic;
 
-    @Schema(title = "Account currency code.")
+    @Schema(title = "Account currency code")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Current ledger balance.")
+    @Schema(title = "Current ledger balance")
     @JsonProperty("current_balance")
     private Object currentBalance;
 
-    @Schema(title = "Available balance.")
+    @Schema(title = "Available balance")
     @JsonProperty("available_balance")
     private Object availableBalance;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

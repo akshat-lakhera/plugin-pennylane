@@ -196,6 +196,67 @@ class TriggersTest {
         assertThat(execution.getTrigger(), notNullValue());
         assertThat(execution.getTrigger().getVariables(), notNullValue());
         assertThat(execution.getTrigger().getVariables().get("invoice"), notNullValue());
+        assertThat(execution.getTrigger().getVariables().get("changeCount"), is(1));
+    }
+
+    @Test
+    void testSupplierInvoiceTriggerHandlesDeletedActionGracefully() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {
+                                "action": "deleted",
+                                "resource_id": 999,
+                                "happened_at": "2024-01-02T11:59:00Z"
+                            },
+                            {
+                                "action": "created",
+                                "resource_id": 102,
+                                "happened_at": "2024-01-02T11:55:00Z"
+                            }
+                        ]
+                    }
+                    """)));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/102"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "id": 102,
+                        "invoice_number": "SUP-102",
+                        "supplier": {"id": 12, "name": "Google Cloud"}
+                    }
+                    """)));
+
+        var trigger = SupplierInvoiceTrigger.builder()
+            .id("sup-trigger-deleted")
+            .type(SupplierInvoiceTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext();
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
+
+        assertThat(executionOpt.isPresent(), is(true));
+        Execution execution = executionOpt.get();
+        assertThat(execution.getTrigger(), notNullValue());
+        assertThat(execution.getTrigger().getVariables().get("changeCount"), is(2));
+        var invoice = (io.kestra.plugin.pennylane.models.SupplierInvoice) execution.getTrigger().getVariables().get("invoice");
+        assertThat(invoice, notNullValue());
+        assertThat(invoice.getId(), is(102L));
     }
 
     @Test
@@ -241,5 +302,6 @@ class TriggersTest {
         assertThat(execution.getTrigger().getVariables(), notNullValue());
         assertThat(execution.getTrigger().getVariables().get("transactionCount"), is(1));
         assertThat(execution.getTrigger().getVariables().get("transaction"), notNullValue());
+        assertThat(execution.getTrigger().getVariables().get("transactions"), notNullValue());
     }
 }

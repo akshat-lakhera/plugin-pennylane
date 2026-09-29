@@ -140,26 +140,39 @@ public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTr
             return Optional.empty();
         }
 
-        // Fetch the full invoice for the most recent changelog entry
-        Changelog latest = changes.get(0);
-        Long invoiceId = latest.getResourceId();
+        // Find the most recent non-deleted change to fetch full invoice details
+        SupplierInvoice invoice = null;
+        for (Changelog change : changes) {
+            String action = change.getAction();
+            if (action != null && (action.equalsIgnoreCase("delete") || action.equalsIgnoreCase("deleted"))) {
+                continue;
+            }
 
-        SupplierInvoice invoice;
-        if (invoiceId != null) {
-            String invoiceUrl = AbstractPennylaneTask.join(baseUrlStr, "supplier_invoices/" + invoiceId);
-            var invoiceRequest = HttpRequest.builder()
-                .uri(URI.create(invoiceUrl))
-                .method("GET");
+            Long invoiceId = change.getResourceId();
+            if (invoiceId == null) {
+                continue;
+            }
 
-            invoice = AbstractPennylaneTask.request(
-                runContext,
-                null,
-                token,
-                invoiceRequest,
-                SupplierInvoice.class
-            ).getBody();
-        } else {
-            invoice = null;
+            try {
+                String invoiceUrl = AbstractPennylaneTask.join(baseUrlStr, "supplier_invoices/" + invoiceId);
+                var invoiceRequest = HttpRequest.builder()
+                    .uri(URI.create(invoiceUrl))
+                    .method("GET");
+
+                invoice = AbstractPennylaneTask.request(
+                    runContext,
+                    null,
+                    token,
+                    invoiceRequest,
+                    SupplierInvoice.class
+                ).getBody();
+
+                if (invoice != null) {
+                    break;
+                }
+            } catch (Exception e) {
+                runContext.logger().debug("Could not fetch supplier invoice {}: {}", invoiceId, e.getMessage());
+            }
         }
 
         Map<String, Object> outputs = new LinkedHashMap<>();

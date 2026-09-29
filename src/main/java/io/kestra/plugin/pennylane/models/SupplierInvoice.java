@@ -20,79 +20,79 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class SupplierInvoice {
 
-    @Schema(title = "Supplier invoice unique identifier.")
+    @Schema(title = "Supplier invoice unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Supplier invoice display label.")
+    @Schema(title = "Supplier invoice display label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Supplier invoice number as issued by the vendor.")
+    @Schema(title = "Supplier invoice number as issued by the vendor")
     @JsonProperty("invoice_number")
     private String invoiceNumber;
 
-    @Schema(title = "Currency code (e.g. 'EUR', 'USD').")
+    @Schema(title = "Currency code (e.g. 'EUR', 'USD')")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Invoice issue date (YYYY-MM-DD).")
+    @Schema(title = "Invoice issue date (YYYY-MM-DD)")
     @JsonProperty("date")
     private String date;
 
-    @Schema(title = "Invoice payment deadline (YYYY-MM-DD).")
+    @Schema(title = "Invoice payment deadline (YYYY-MM-DD)")
     @JsonProperty("deadline")
     private String deadline;
 
-    @Schema(title = "Total invoice amount including tax.")
+    @Schema(title = "Total invoice amount including tax")
     @JsonProperty("amount")
     private Object amount;
 
-    @Schema(title = "Invoice amount in original currency.")
+    @Schema(title = "Invoice amount in original currency")
     @JsonProperty("currency_amount")
     private Object currencyAmount;
 
-    @Schema(title = "Tax / VAT amount in euros.")
+    @Schema(title = "Tax / VAT amount in euros")
     @JsonProperty("tax")
     private Object tax;
 
-    @Schema(title = "Tax / VAT amount in invoice currency.")
+    @Schema(title = "Tax / VAT amount in invoice currency")
     @JsonProperty("currency_tax")
     private Object currencyTax;
 
-    @Schema(title = "Payment status, e.g. 'paid', 'not_paid', 'partially_paid'.")
+    @Schema(title = "Payment status, e.g. 'paid', 'not_paid', 'partially_paid'")
     @JsonProperty("payment_status")
     private String paymentStatus;
 
-    @Schema(title = "Accounting validation state ('draft', 'entry', 'validation_needed', 'complete', 'archived').")
+    @Schema(title = "Accounting validation state ('draft', 'entry', 'validation_needed', 'complete', 'archived')")
     @JsonProperty("accounting_status")
     private String accountingStatus;
 
-    @Schema(title = "Whether the invoice has been bank reconciled.")
+    @Schema(title = "Whether the invoice has been bank reconciled")
     @JsonProperty("reconciled")
     private Boolean reconciled;
 
-    @Schema(title = "Name of the attached invoice document file.")
+    @Schema(title = "Name of the attached invoice document file")
     @JsonProperty("filename")
     private String filename;
 
-    @Schema(title = "Public temporary download URL for the invoice PDF (expires in ~30 min).")
+    @Schema(title = "Public temporary download URL for the invoice PDF (expires in ~30 min)")
     @JsonProperty("public_file_url")
     private String publicFileUrl;
 
-    @Schema(title = "Source electronic invoice file URL if available.")
+    @Schema(title = "Source electronic invoice file URL if available")
     @JsonProperty("source_file_url")
     private String sourceFileUrl;
 
-    @Schema(title = "Supplier summary reference.")
+    @Schema(title = "Supplier summary reference")
     @JsonProperty("supplier")
     private Map<String, Object> supplier;
 
-    @Schema(title = "Timestamp when the invoice was created in Pennylane.")
+    @Schema(title = "Timestamp when the invoice was created in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Timestamp when the invoice was last updated in Pennylane.")
+    @Schema(title = "Timestamp when the invoice was last updated in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

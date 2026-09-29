@@ -20,55 +20,55 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Transaction {
 
-    @Schema(title = "Bank transaction unique identifier.")
+    @Schema(title = "Bank transaction unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Bank transaction description or label.")
+    @Schema(title = "Bank transaction description or label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Transaction amount in euros.")
+    @Schema(title = "Transaction amount in euros")
     @JsonProperty("amount")
     private Object amount;
 
-    @Schema(title = "Currency code.")
+    @Schema(title = "Currency code")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Transaction amount in original account currency.")
+    @Schema(title = "Transaction amount in original account currency")
     @JsonProperty("currency_amount")
     private Object currencyAmount;
 
-    @Schema(title = "Transaction execution date (YYYY-MM-DD).")
+    @Schema(title = "Transaction execution date (YYYY-MM-DD)")
     @JsonProperty("date")
     private String date;
 
-    @Schema(title = "Transaction value / settlement date (YYYY-MM-DD).")
+    @Schema(title = "Transaction value / settlement date (YYYY-MM-DD)")
     @JsonProperty("settlement_date")
     private String settlementDate;
 
-    @Schema(title = "Associated bank account identifier.")
+    @Schema(title = "Associated bank account identifier")
     @JsonProperty("bank_account_id")
     private Long bankAccountId;
 
-    @Schema(title = "Associated journal identifier if matched.")
+    @Schema(title = "Associated journal identifier if matched")
     @JsonProperty("journal_id")
     private Long journalId;
 
-    @Schema(title = "Whether this transaction has been categorized (matched to a supplier/customer invoice).")
+    @Schema(title = "Whether this transaction has been categorized (matched to a supplier/customer invoice)")
     @JsonProperty("categorized")
     private Boolean categorized;
 
-    @Schema(title = "Category identifier if the transaction has been categorized.")
+    @Schema(title = "Category identifier if the transaction has been categorized")
     @JsonProperty("category_id")
     private Long categoryId;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

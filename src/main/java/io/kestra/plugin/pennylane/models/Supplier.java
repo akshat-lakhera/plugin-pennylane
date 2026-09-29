@@ -21,59 +21,59 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Supplier {
 
-    @Schema(title = "Supplier unique identifier.")
+    @Schema(title = "Supplier unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Supplier business or entity name.")
+    @Schema(title = "Supplier business or entity name")
     @JsonProperty("name")
     private String name;
 
-    @Schema(title = "Supplier source.")
+    @Schema(title = "Supplier source")
     @JsonProperty("source")
     private String source;
 
-    @Schema(title = "List of supplier email addresses.")
+    @Schema(title = "List of supplier email addresses")
     @JsonProperty("emails")
     private List<String> emails;
 
-    @Schema(title = "List of supplier phone numbers.")
+    @Schema(title = "List of supplier phone numbers")
     @JsonProperty("phone_numbers")
     private List<String> phoneNumbers;
 
-    @Schema(title = "Street address line.")
+    @Schema(title = "Street address line")
     @JsonProperty("address")
     private String address;
 
-    @Schema(title = "Postal / ZIP code.")
+    @Schema(title = "Postal / ZIP code")
     @JsonProperty("postal_code")
     private String postalCode;
 
-    @Schema(title = "City name.")
+    @Schema(title = "City name")
     @JsonProperty("city")
     private String city;
 
-    @Schema(title = "Two-letter ISO country code.")
+    @Schema(title = "Two-letter ISO country code")
     @JsonProperty("country_alpha2")
     private String countryAlpha2;
 
-    @Schema(title = "VAT identification number.")
+    @Schema(title = "VAT identification number")
     @JsonProperty("vat_number")
     private String vatNumber;
 
-    @Schema(title = "SIREN number for French companies.")
+    @Schema(title = "SIREN number for French companies")
     @JsonProperty("siren")
     private String siren;
 
-    @Schema(title = "SIRET number for French companies.")
+    @Schema(title = "SIRET number for French companies")
     @JsonProperty("siret")
     private String siret;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 

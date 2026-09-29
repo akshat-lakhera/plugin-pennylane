@@ -20,47 +20,47 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BillingSubscription {
 
-    @Schema(title = "Billing subscription unique identifier.")
+    @Schema(title = "Billing subscription unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Subscription label.")
+    @Schema(title = "Subscription label")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Customer identifier this subscription belongs to.")
+    @Schema(title = "Customer identifier this subscription belongs to")
     @JsonProperty("customer_id")
     private Long customerId;
 
-    @Schema(title = "Billing period start date (YYYY-MM-DD).")
+    @Schema(title = "Billing period start date (YYYY-MM-DD)")
     @JsonProperty("billing_start_date")
     private String billingStartDate;
 
-    @Schema(title = "Billing period end date (YYYY-MM-DD), if applicable.")
+    @Schema(title = "Billing period end date (YYYY-MM-DD), if applicable")
     @JsonProperty("billing_end_date")
     private String billingEndDate;
 
-    @Schema(title = "Recurring billing frequency.")
+    @Schema(title = "Recurring billing frequency")
     @JsonProperty("billing_frequency")
     private String billingFrequency;
 
-    @Schema(title = "Total subscription amount.")
+    @Schema(title = "Total subscription amount")
     @JsonProperty("amount")
     private Object amount;
 
-    @Schema(title = "Currency code.")
+    @Schema(title = "Currency code")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Whether the subscription is currently active.")
+    @Schema(title = "Whether the subscription is currently active")
     @JsonProperty("active")
     private Boolean active;
 
-    @Schema(title = "Creation timestamp in Pennylane.")
+    @Schema(title = "Creation timestamp in Pennylane")
     @JsonProperty("created_at")
     private String createdAt;
 
-    @Schema(title = "Last update timestamp in Pennylane.")
+    @Schema(title = "Last update timestamp in Pennylane")
     @JsonProperty("updated_at")
     private String updatedAt;
 
