@@ -18,51 +18,51 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Transaction {
+public class LedgerEntryLine {
 
-    @Schema(title = "Bank transaction unique identifier.")
+    @Schema(title = "Ledger entry line unique identifier.")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Bank transaction description or label.")
-    @JsonProperty("label")
-    private String label;
+    @Schema(title = "Associated ledger entry identifier.")
+    @JsonProperty("ledger_entry_id")
+    private Long ledgerEntryId;
 
-    @Schema(title = "Transaction amount in euros.")
-    @JsonProperty("amount")
-    private Object amount;
+    @Schema(title = "Associated ledger account identifier.")
+    @JsonProperty("ledger_account_id")
+    private Long ledgerAccountId;
+
+    @Schema(title = "Debit amount in euros.")
+    @JsonProperty("debit")
+    private Object debit;
+
+    @Schema(title = "Credit amount in euros.")
+    @JsonProperty("credit")
+    private Object credit;
 
     @Schema(title = "Currency code.")
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Transaction amount in original account currency.")
-    @JsonProperty("currency_amount")
-    private Object currencyAmount;
+    @Schema(title = "Debit amount in document currency.")
+    @JsonProperty("currency_debit")
+    private Object currencyDebit;
 
-    @Schema(title = "Transaction execution date (YYYY-MM-DD).")
+    @Schema(title = "Credit amount in document currency.")
+    @JsonProperty("currency_credit")
+    private Object currencyCredit;
+
+    @Schema(title = "Entry date (YYYY-MM-DD).")
     @JsonProperty("date")
     private String date;
 
-    @Schema(title = "Transaction value / settlement date (YYYY-MM-DD).")
-    @JsonProperty("settlement_date")
-    private String settlementDate;
+    @Schema(title = "Label / memo for this line.")
+    @JsonProperty("label")
+    private String label;
 
-    @Schema(title = "Associated bank account identifier.")
-    @JsonProperty("bank_account_id")
-    private Long bankAccountId;
-
-    @Schema(title = "Associated journal identifier if matched.")
-    @JsonProperty("journal_id")
-    private Long journalId;
-
-    @Schema(title = "Whether this transaction has been categorized (matched to a supplier/customer invoice).")
-    @JsonProperty("categorized")
-    private Boolean categorized;
-
-    @Schema(title = "Category identifier if the transaction has been categorized.")
-    @JsonProperty("category_id")
-    private Long categoryId;
+    @Schema(title = "Lettering code used for account reconciliation.")
+    @JsonProperty("lettering")
+    private String lettering;
 
     @Schema(title = "Creation timestamp in Pennylane.")
     @JsonProperty("created_at")

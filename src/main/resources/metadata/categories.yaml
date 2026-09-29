@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.categories
+name: "categories"
+title: "Master Data - Categories"
+description: "Tasks for querying Pennylane transaction and invoice categories."
+body: "Retrieve accounting and operational categories configured in Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

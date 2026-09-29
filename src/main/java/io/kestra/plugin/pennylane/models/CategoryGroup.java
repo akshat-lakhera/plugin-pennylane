@@ -18,51 +18,15 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Transaction {
+public class CategoryGroup {
 
-    @Schema(title = "Bank transaction unique identifier.")
+    @Schema(title = "Category group unique identifier.")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Bank transaction description or label.")
+    @Schema(title = "Category group label.")
     @JsonProperty("label")
     private String label;
-
-    @Schema(title = "Transaction amount in euros.")
-    @JsonProperty("amount")
-    private Object amount;
-
-    @Schema(title = "Currency code.")
-    @JsonProperty("currency")
-    private String currency;
-
-    @Schema(title = "Transaction amount in original account currency.")
-    @JsonProperty("currency_amount")
-    private Object currencyAmount;
-
-    @Schema(title = "Transaction execution date (YYYY-MM-DD).")
-    @JsonProperty("date")
-    private String date;
-
-    @Schema(title = "Transaction value / settlement date (YYYY-MM-DD).")
-    @JsonProperty("settlement_date")
-    private String settlementDate;
-
-    @Schema(title = "Associated bank account identifier.")
-    @JsonProperty("bank_account_id")
-    private Long bankAccountId;
-
-    @Schema(title = "Associated journal identifier if matched.")
-    @JsonProperty("journal_id")
-    private Long journalId;
-
-    @Schema(title = "Whether this transaction has been categorized (matched to a supplier/customer invoice).")
-    @JsonProperty("categorized")
-    private Boolean categorized;
-
-    @Schema(title = "Category identifier if the transaction has been categorized.")
-    @JsonProperty("category_id")
-    private Long categoryId;
 
     @Schema(title = "Creation timestamp in Pennylane.")
     @JsonProperty("created_at")

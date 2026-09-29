@@ -18,17 +18,33 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Transaction {
+public class BillingSubscription {
 
-    @Schema(title = "Bank transaction unique identifier.")
+    @Schema(title = "Billing subscription unique identifier.")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Bank transaction description or label.")
+    @Schema(title = "Subscription label.")
     @JsonProperty("label")
     private String label;
 
-    @Schema(title = "Transaction amount in euros.")
+    @Schema(title = "Customer identifier this subscription belongs to.")
+    @JsonProperty("customer_id")
+    private Long customerId;
+
+    @Schema(title = "Billing period start date (YYYY-MM-DD).")
+    @JsonProperty("billing_start_date")
+    private String billingStartDate;
+
+    @Schema(title = "Billing period end date (YYYY-MM-DD), if applicable.")
+    @JsonProperty("billing_end_date")
+    private String billingEndDate;
+
+    @Schema(title = "Recurring billing frequency.")
+    @JsonProperty("billing_frequency")
+    private String billingFrequency;
+
+    @Schema(title = "Total subscription amount.")
     @JsonProperty("amount")
     private Object amount;
 
@@ -36,33 +52,9 @@ public class Transaction {
     @JsonProperty("currency")
     private String currency;
 
-    @Schema(title = "Transaction amount in original account currency.")
-    @JsonProperty("currency_amount")
-    private Object currencyAmount;
-
-    @Schema(title = "Transaction execution date (YYYY-MM-DD).")
-    @JsonProperty("date")
-    private String date;
-
-    @Schema(title = "Transaction value / settlement date (YYYY-MM-DD).")
-    @JsonProperty("settlement_date")
-    private String settlementDate;
-
-    @Schema(title = "Associated bank account identifier.")
-    @JsonProperty("bank_account_id")
-    private Long bankAccountId;
-
-    @Schema(title = "Associated journal identifier if matched.")
-    @JsonProperty("journal_id")
-    private Long journalId;
-
-    @Schema(title = "Whether this transaction has been categorized (matched to a supplier/customer invoice).")
-    @JsonProperty("categorized")
-    private Boolean categorized;
-
-    @Schema(title = "Category identifier if the transaction has been categorized.")
-    @JsonProperty("category_id")
-    private Long categoryId;
+    @Schema(title = "Whether the subscription is currently active.")
+    @JsonProperty("active")
+    private Boolean active;
 
     @Schema(title = "Creation timestamp in Pennylane.")
     @JsonProperty("created_at")

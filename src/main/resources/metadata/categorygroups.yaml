@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.categorygroups
+name: "categorygroups"
+title: "Master Data - Category Groups"
+description: "Tasks for querying Pennylane category group hierarchies."
+body: "Retrieve top-level category groups used to organize categories in Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

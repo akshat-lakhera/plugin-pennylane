@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.accounting.ledgeraccounts
+name: "ledgeraccounts"
+title: "Accounting - Ledger Accounts"
+description: "Tasks for querying Pennylane general ledger chart of accounts."
+body: "Retrieve ledger accounts and accounting chart structure from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

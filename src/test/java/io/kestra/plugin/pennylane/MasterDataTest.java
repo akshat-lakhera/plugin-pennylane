@@ -201,4 +201,100 @@ class MasterDataTest {
         assertThat(getOut.getRow().getName(), is("Main Checking"));
         assertThat(getOut.getRow().getCurrentBalance(), is("85400.00"));
     }
+
+    @Test
+    void testCategories() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/categories"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {"id": 401, "label": "Software Subscriptions", "category_group_id": 10}
+                        ]
+                    }
+                    """)));
+
+        var listTask = io.kestra.plugin.pennylane.masterdata.categories.List.builder()
+            .id("test-cat-list")
+            .type(io.kestra.plugin.pennylane.masterdata.categories.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+
+        RunContext rcList = TestsUtils.mockRunContext(runContextFactory, listTask, Map.of());
+        var listOut = listTask.run(rcList);
+        assertThat(listOut.getCount(), is(1));
+        assertThat(listOut.getRows().get(0).getId(), is(401L));
+        assertThat(listOut.getRows().get(0).getLabel(), is("Software Subscriptions"));
+    }
+
+    @Test
+    void testCategoryGroups() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/category_groups"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {"id": 10, "label": "Operating Expenses"}
+                        ]
+                    }
+                    """)));
+
+        var listTask = io.kestra.plugin.pennylane.masterdata.categorygroups.List.builder()
+            .id("test-catgroup-list")
+            .type(io.kestra.plugin.pennylane.masterdata.categorygroups.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+
+        RunContext rcList = TestsUtils.mockRunContext(runContextFactory, listTask, Map.of());
+        var listOut = listTask.run(rcList);
+        assertThat(listOut.getCount(), is(1));
+        assertThat(listOut.getRows().get(0).getId(), is(10L));
+        assertThat(listOut.getRows().get(0).getLabel(), is("Operating Expenses"));
+    }
+
+    @Test
+    void testBillingSubscriptions() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/billing_subscriptions"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {
+                                "id": 501,
+                                "customer_id": 22,
+                                "active": true,
+                                "billing_frequency": "month"
+                            }
+                        ]
+                    }
+                    """)));
+
+        var listTask = io.kestra.plugin.pennylane.masterdata.billingsubscriptions.List.builder()
+            .id("test-sub-list")
+            .type(io.kestra.plugin.pennylane.masterdata.billingsubscriptions.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+
+        RunContext rcList = TestsUtils.mockRunContext(runContextFactory, listTask, Map.of());
+        var listOut = listTask.run(rcList);
+        assertThat(listOut.getCount(), is(1));
+        assertThat(listOut.getRows().get(0).getId(), is(501L));
+        assertThat(listOut.getRows().get(0).getActive(), is(true));
+        assertThat(listOut.getRows().get(0).getBillingFrequency(), is("month"));
+    }
 }

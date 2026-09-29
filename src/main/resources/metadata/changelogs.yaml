@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.changelogs
+name: "changelogs"
+title: "Changelogs"
+description: "Tasks for tracking audit logs and incremental event changes in Pennylane."
+body: "Stream and list incremental change events across Pennylane resources using watermark timestamps."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

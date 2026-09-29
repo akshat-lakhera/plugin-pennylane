@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.accounting.trialbalance
+name: "trialbalance"
+title: "Accounting - Trial Balance"
+description: "Tasks for generating trial balances across accounting periods."
+body: "Retrieve balanced ledger debit and credit totals across all accounts in Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

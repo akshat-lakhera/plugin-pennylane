@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.masterdata.billingsubscriptions
+name: "billingsubscriptions"
+title: "Master Data - Billing Subscriptions"
+description: "Tasks for querying and managing Pennylane recurring billing subscriptions."
+body: "Retrieve customer subscription plans and recurring billing schedules from Pennylane."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

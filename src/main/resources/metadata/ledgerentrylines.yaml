@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.accounting.ledgerentrylines
+name: "ledgerentrylines"
+title: "Accounting - Ledger Entry Lines"
+description: "Tasks for querying Pennylane general ledger journal entry lines."
+body: "Retrieve debit and credit accounting entry lines from Pennylane general ledger."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"
