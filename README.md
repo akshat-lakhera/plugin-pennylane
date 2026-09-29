@@ -37,16 +37,49 @@
 
 # Kestra Pennylane Plugin
 
-## Why
+Sync [Pennylane](https://pennylane.com) accounting data into Kestra flows: supplier and customer invoices, bank transactions, customers, suppliers, categories, and the general ledger.
 
-- What user problem does this solve? Teams need a concrete starting point for building and validating new Kestra plugins without recreating the same project scaffolding from scratch.
-- Why would a team adopt this plugin in a workflow? It gives plugin authors a ready-made reference repo they can adapt alongside their own build, test, and publishing workflow.
-- What operational/business outcome does it enable? It shortens plugin delivery time, reduces setup mistakes, and makes internal or partner plugin development more repeatable.
+The plugin calls the [Pennylane API v2](https://pennylane.readme.io/) at `https://app.pennylane.com/api/external/v2`. Authenticate with a company or firm API token. Store the token as a Kestra secret and pass `{{ secret('PENNYLANE_API_TOKEN') }}` to `apiToken`.
 
-## What
+## Tasks
 
-- Provides plugin components under `io.kestra.plugin.pennylane`.
-- Includes classes such as `Example`, `Trigger`.
+List tasks accept `fetchType`:
+
+- `FETCH` returns `rows`
+- `FETCH_ONE` returns the first `row` and still counts every included record
+- `STORE` appends each page to an internal-storage `.ion` file as the page arrives
+- `NONE` returns only `count`
+
+Cursor lists send `limit` (1–100, default 100). `changelogs.List` and `accounting.trialbalance.Get` allow up to 1000. `pageSize` outside that range fails the task instead of being clamped. `maxRecords` stops early when set and must be at least 1.
+
+| Task | Endpoint |
+| --- | --- |
+| `supplierinvoices.List` / `Get` / `Download` / `MatchedTransactions` | `/supplier_invoices` |
+| `customerinvoices.List` / `Get` | `/customer_invoices` |
+| `transactions.List` / `Get` | `/transactions` |
+| `changelogs.List` | `/changelogs/{resource}` |
+| `accounting.ledgeraccounts.List` | `/ledger_accounts` |
+| `accounting.ledgerentries.List` | `/ledger_entries` (page / per_page) |
+| `accounting.ledgerentrylines.List` | `/ledger_entry_lines` |
+| `accounting.trialbalance.Get` | `/trial_balance` |
+| `masterdata.customers.List` / `Get` | `/customers` |
+| `masterdata.suppliers.List` / `Get` | `/suppliers` |
+| `masterdata.bankaccounts.List` / `Get` | `/bank_accounts` |
+| `masterdata.categories.List` | `/categories` |
+| `masterdata.categorygroups.List` | `/category_groups` |
+| `masterdata.billingsubscriptions.List` | `/billing_subscriptions` |
+
+`accounting.ledgerentries.List` is the v2 replacement for journal entries. `Download` follows `public_file_url`, then `source_file_url`, and does not send the API token to the file host. Supplier `paymentStatus` uses the v2 values (`to_be_paid`, `partially_paid`, `fully_paid`, and the other `payment_*` states). Supplier `categoryIds` is sent as `category_id` `in`. Customer and supplier `search` is `name` `start_with`.
+
+Transaction list filters are only `id`, `bank_account_id`, `journal_id`, and `date`. Incremental transaction sync goes through the changelog.
+
+## Triggers
+
+`SupplierInvoiceTrigger`, `CustomerInvoicePaidTrigger`, and `TransactionTrigger` poll `GET /changelogs/{resource}`. The first request sends `start_date`. Later pages send `cursor` and `limit` only. Each poll reads until `has_more` is false, then writes a namespace KV watermark (`processed_at` plus the resource ids at that timestamp). The watermark moves on every poll, including polls that do not fire. Deletes are not fetched. A failed GET is logged and skipped, and the watermark still advances so a permanent 404 does not block later events.
+
+One execution carries every matching item from that scan. `trigger.invoice` or `trigger.transaction` is the newest match. `CustomerInvoicePaidTrigger` keeps invoices whose `paid` field is true. `TransactionTrigger` loads transactions with `id` `in` (and optional `bank_account_id` `eq`). `categorized` is applied after the fetch: the boolean when the payload has it, otherwise a non-empty `categories` array.
+
+HTTP 429 responses are retried with `Retry-After` or exponential backoff.
 
 ## Running Kestra locally with this plugin
 

@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -66,8 +67,9 @@ class TriggersTest {
 
     private Flow createFlow() {
         return Flow.builder()
-            .id("test-flow")
-            .namespace("io.kestra.test")
+            .id("flow-" + UUID.randomUUID())
+            .namespace("io.kestra.plugin.pennylane.it")
+            .tenantId("main")
             .revision(1)
             .build();
     }
@@ -81,11 +83,11 @@ class TriggersTest {
             .build();
     }
 
-    private TriggerContext createTriggerContext() {
+    private TriggerContext createTriggerContext(Flow flow, String triggerId) {
         return TriggerContext.builder()
-            .namespace("io.kestra.test")
-            .flowId("test-flow")
-            .triggerId("test-trigger")
+            .namespace(flow.getNamespace())
+            .flowId(flow.getId())
+            .triggerId(triggerId)
             .date(ZonedDateTime.of(2024, 1, 2, 12, 0, 0, 0, ZoneOffset.UTC))
             .build();
     }
@@ -102,9 +104,11 @@ class TriggersTest {
                         "next_cursor": null,
                         "items": [
                             {
-                                "action": "created",
-                                "resource_id": 101,
-                                "happened_at": "2024-01-02T11:55:00Z"
+                                "id": 101,
+                                "operation": "insert",
+                                "processed_at": "2024-01-02T11:55:00Z",
+                                "updated_at": "2024-01-02T11:55:00Z",
+                                "created_at": "2024-01-02T11:55:00Z"
                             }
                         ]
                     }
@@ -131,7 +135,7 @@ class TriggersTest {
             .build();
 
         Flow flow = createFlow();
-        TriggerContext triggerContext = createTriggerContext();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
         ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
 
         Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
@@ -156,9 +160,9 @@ class TriggersTest {
                         "next_cursor": null,
                         "items": [
                             {
-                                "action": "updated",
-                                "resource_id": 201,
-                                "happened_at": "2024-01-02T11:58:00Z"
+                                "id": 201,
+                                "operation": "update",
+                                "processed_at": "2024-01-02T11:58:00Z"
                             }
                         ]
                     }
@@ -186,7 +190,7 @@ class TriggersTest {
             .build();
 
         Flow flow = createFlow();
-        TriggerContext triggerContext = createTriggerContext();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
         ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
 
         Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
@@ -211,14 +215,14 @@ class TriggersTest {
                         "next_cursor": null,
                         "items": [
                             {
-                                "action": "deleted",
-                                "resource_id": 999,
-                                "happened_at": "2024-01-02T11:59:00Z"
+                                "id": 999,
+                                "operation": "delete",
+                                "processed_at": "2024-01-02T11:50:00Z"
                             },
                             {
-                                "action": "created",
-                                "resource_id": 102,
-                                "happened_at": "2024-01-02T11:55:00Z"
+                                "id": 102,
+                                "operation": "insert",
+                                "processed_at": "2024-01-02T11:55:00Z"
                             }
                         ]
                     }
@@ -245,7 +249,7 @@ class TriggersTest {
             .build();
 
         Flow flow = createFlow();
-        TriggerContext triggerContext = createTriggerContext();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
         ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
 
         Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
@@ -261,7 +265,26 @@ class TriggersTest {
 
     @Test
     void testTransactionTriggerFires() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/transactions"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {
+                                "id": 301,
+                                "operation": "insert",
+                                "processed_at": "2024-01-02T11:58:00Z"
+                            }
+                        ]
+                    }
+                    """)));
+
         wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/transactions"))
+            .withQueryParam("filter", containing("\"field\":\"id\""))
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
@@ -275,7 +298,9 @@ class TriggersTest {
                                 "amount": "-49.99",
                                 "currency": "EUR",
                                 "label": "Cloud Hosting",
-                                "categorized": false
+                                "categorized": false,
+                                "bank_account": {"id": 42, "url": "https://app.pennylane.com/api/external/v2/bank_accounts/42"},
+                                "categories": []
                             }
                         ]
                     }
@@ -291,7 +316,7 @@ class TriggersTest {
             .build();
 
         Flow flow = createFlow();
-        TriggerContext triggerContext = createTriggerContext();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
         ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
 
         Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
@@ -303,5 +328,166 @@ class TriggersTest {
         assertThat(execution.getTrigger().getVariables().get("transactionCount"), is(1));
         assertThat(execution.getTrigger().getVariables().get("transaction"), notNullValue());
         assertThat(execution.getTrigger().getVariables().get("transactions"), notNullValue());
+
+        wireMockServer.verify(getRequestedFor(urlPathEqualTo("/api/external/v2/changelogs/transactions")));
+        wireMockServer.verify(getRequestedFor(urlPathEqualTo("/api/external/v2/transactions"))
+            .withQueryParam("filter", containing("\"field\":\"id\""))
+            .withQueryParam("filter", notContaining("updated_at"))
+            .withQueryParam("filter", notContaining("categorized")));
+    }
+
+    @Test
+    void testSupplierInvoiceTriggerDoesNotRefireSameWatermark() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 101, "operation": "insert", "processed_at": "2024-01-02T11:55:00Z"}
+                        ]
+                    }
+                    """)));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/101"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"id\": 101, \"invoice_number\": \"SUP-101\"}")));
+
+        var trigger = SupplierInvoiceTrigger.builder()
+            .id("sup-trigger-once")
+            .type(SupplierInvoiceTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isPresent(), is(true));
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isPresent(), is(false));
+    }
+
+    @Test
+    void testSupplierInvoiceTriggerSkipsDeletesAndFailedFetches() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 404, "operation": "insert", "processed_at": "2024-01-02T11:50:00Z"},
+                            {"id": 777, "operation": "delete", "processed_at": "2024-01-02T11:56:00Z"}
+                        ]
+                    }
+                    """)));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/404"))
+            .willReturn(aResponse().withStatus(404).withBody("{\"error\":\"missing\"}")));
+
+        var trigger = SupplierInvoiceTrigger.builder()
+            .id("sup-trigger-skip")
+            .type(SupplierInvoiceTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isEmpty(), is(true));
+        wireMockServer.verify(0, getRequestedFor(urlPathEqualTo("/api/external/v2/supplier_invoices/777")));
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isEmpty(), is(true));
+    }
+
+    @Test
+    void testEmptyPollAdvancesWatermarkPastOlderEvents() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/customer_invoices"))
+            .inScenario("empty-then-old")
+            .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"has_more\": false, \"items\": []}"))
+            .willSetStateTo("after-empty"));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/customer_invoices"))
+            .inScenario("empty-then-old")
+            .whenScenarioStateIs("after-empty")
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 5, "operation": "update", "processed_at": "2024-01-02T11:40:00Z"}
+                        ]
+                    }
+                    """)));
+
+        var trigger = CustomerInvoicePaidTrigger.builder()
+            .id("paid-watermark")
+            .type(CustomerInvoicePaidTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isEmpty(), is(true));
+        assertThat(trigger.evaluate(conditionContext, triggerContext).isEmpty(), is(true));
+        wireMockServer.verify(0, getRequestedFor(urlPathEqualTo("/api/external/v2/customer_invoices/5")));
+    }
+
+    @Test
+    void testCustomerPaidTriggerKeepsEveryPaidInvoice() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/customer_invoices"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 1, "operation": "update", "processed_at": "2024-01-02T11:50:00Z"},
+                            {"id": 2, "operation": "update", "processed_at": "2024-01-02T11:58:00Z"}
+                        ]
+                    }
+                    """)));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/customer_invoices/1"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"id\": 1, \"paid\": false}")));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/customer_invoices/2"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"id\": 2, \"paid\": true}")));
+
+        var trigger = CustomerInvoicePaidTrigger.builder()
+            .id("paid-both")
+            .type(CustomerInvoicePaidTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        Optional<Execution> execution = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(execution.isPresent(), is(true));
+        var invoice = (io.kestra.plugin.pennylane.models.CustomerInvoice) execution.get().getTrigger().getVariables().get("invoice");
+        assertThat(invoice.getId(), is(2L));
+        assertThat(execution.get().getTrigger().getVariables().get("changeCount"), is(2));
     }
 }

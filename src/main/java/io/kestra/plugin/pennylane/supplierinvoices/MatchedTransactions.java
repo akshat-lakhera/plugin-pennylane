@@ -70,22 +70,23 @@ public class MatchedTransactions extends AbstractPennylaneTask implements Runnab
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Long id = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
+        Long rInvoiceId = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
             () -> new IllegalArgumentException("invoiceId is required")
         );
 
         Map<String, String> queryParams = new LinkedHashMap<>();
-        String endpointPath = "supplier_invoices/" + id + "/matched_transactions";
+        queryParams.put("limit", String.valueOf(MAX_LIST_PAGE_SIZE));
 
-        java.util.List<Transaction> items = paginate(
+        FetchResult<Transaction> result = drain(
             runContext,
-            endpointPath,
+            "supplier_invoices/" + rInvoiceId + "/matched_transactions",
             queryParams,
             Transaction.class,
+            this.fetchType,
+            null,
+            PageMode.STANDARD,
             null
         );
-
-        FetchResult<Transaction> result = fetchOutput(runContext, this.fetchType, items);
 
         return Output.builder()
             .rows(result.rows())

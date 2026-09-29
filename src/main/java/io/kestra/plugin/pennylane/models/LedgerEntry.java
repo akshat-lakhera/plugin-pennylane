@@ -18,34 +18,38 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Changelog {
+public class LedgerEntry {
 
-    @Schema(title = "Identifier of the resource this changelog event refers to")
+    @Schema(title = "Ledger entry unique identifier")
     @JsonProperty("id")
     private Long id;
 
-    @Schema(title = "Operation applied to the resource: insert, update, or delete")
-    @JsonProperty("operation")
-    private String operation;
+    @Schema(title = "Entry label")
+    @JsonProperty("label")
+    private String label;
 
-    @Schema(title = "Timestamp when Pennylane processed the change, oldest first")
-    @JsonProperty("processed_at")
-    private String processedAt;
+    @Schema(title = "Accounting date (YYYY-MM-DD)")
+    @JsonProperty("date")
+    private String date;
 
-    @Schema(title = "Resource updated_at copied onto the changelog event")
-    @JsonProperty("updated_at")
-    private String updatedAt;
+    @Schema(title = "Journal identifier")
+    @JsonProperty("journal_id")
+    private Long journalId;
 
-    @Schema(title = "Resource created_at copied onto the changelog event")
+    @Schema(title = "Attached ledger document filename")
+    @JsonProperty("ledger_attachment_filename")
+    private String ledgerAttachmentFilename;
+
+    @Schema(title = "Creation timestamp")
     @JsonProperty("created_at")
     private String createdAt;
 
+    @Schema(title = "Last update timestamp")
+    @JsonProperty("updated_at")
+    private String updatedAt;
+
     @Builder.Default
     private Map<String, Object> additionalProperties = new HashMap<>();
-
-    public boolean deleted() {
-        return operation != null && operation.equalsIgnoreCase("delete");
-    }
 
     @JsonAnyGetter
     public Map<String, Object> getAdditionalProperties() {

@@ -1,6 +1,6 @@
 package io.kestra.plugin.pennylane.supplierinvoices;
 
-import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.client.configurations.HttpConfiguration;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -13,10 +13,11 @@ import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
+import io.kestra.plugin.pennylane.PennylaneWatermark;
 import io.kestra.plugin.pennylane.models.Changelog;
-import io.kestra.plugin.pennylane.models.PennylanePage;
 import io.kestra.plugin.pennylane.models.SupplierInvoice;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -24,10 +25,8 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.net.URI;
 import java.time.Duration;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,9 +39,9 @@ import java.util.Optional;
 @NoArgsConstructor
 @Schema(
     title = "Trigger on new Pennylane supplier invoices",
-    description = "Polls the Pennylane changelog for new or updated supplier invoices at a configurable interval. " +
-        "Fires one execution per poll cycle when new supplier invoices are detected. " +
-        "The most recent new invoice is available as `trigger.invoice` in downstream tasks."
+    description = "Polls GET /changelogs/supplier_invoices and fetches each inserted or updated invoice. " +
+        "A namespace KV watermark stores the last fully paged processed_at and advances on every poll, including empty polls. " +
+        "One execution contains every new invoice from the scan. Deletes are skipped and a failed fetch is not emitted."
 )
 @Plugin(
     examples = {
@@ -73,6 +72,7 @@ public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTr
         title = "Pennylane API token",
         description = "Company or firm API token used to authenticate against the Pennylane API."
     )
+    @NotNull
     @PluginProperty(secret = true, group = "connection")
     @ToString.Exclude
     private Property<String> apiToken;
@@ -84,6 +84,13 @@ public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTr
     @Builder.Default
     @PluginProperty(group = "connection")
     private Property<String> baseUrl = Property.ofValue(AbstractPennylaneTask.DEFAULT_BASE_URL);
+
+    @Schema(
+        title = "HTTP client options",
+        description = "Optional HTTP client configuration (timeouts, proxy, SSL) applied to every request."
+    )
+    @PluginProperty(group = "advanced")
+    private HttpConfiguration options;
 
     @Schema(
         title = "Polling interval",
@@ -101,92 +108,56 @@ public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTr
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
         RunContext runContext = conditionContext.getRunContext();
+        String rApiToken = AbstractPennylaneTask.renderApiToken(runContext, this.apiToken);
+        String rBaseUrl = AbstractPennylaneTask.renderBaseUrl(runContext, this.baseUrl);
+        String namespace = conditionContext.getFlow().getNamespace();
+        String watermarkKey = PennylaneWatermark.key(conditionContext.getFlow().getId(), this.getId());
+        PennylaneWatermark.State previous = PennylaneWatermark.load(runContext, namespace, watermarkKey);
+        String lookback = PennylaneWatermark.initialStart(context.getDate(), this.interval);
 
-        String token = AbstractPennylaneTask.renderApiToken(runContext, this.apiToken);
-        String baseUrlStr = AbstractPennylaneTask.renderBaseUrl(runContext, this.baseUrl);
-
-        // Compute since timestamp: last evaluation date (current scheduled date minus one interval)
-        String since = context.getDate()
-            .minus(this.interval)
-            .withZoneSameInstant(ZoneOffset.UTC)
-            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-
-        Map<String, String> queryParams = new LinkedHashMap<>();
-        queryParams.put("start_date", since);
-        queryParams.put("limit", "100");
-
-        String url = AbstractPennylaneTask.buildUriWithParams(baseUrlStr, "changelogs/supplier_invoices", queryParams);
-
-        var requestBuilder = HttpRequest.builder()
-            .uri(URI.create(url))
-            .method("GET");
-
-        var pageType = AbstractPennylaneTask.MAPPER
-            .getTypeFactory()
-            .constructParametricType(PennylanePage.class, Changelog.class);
-
-        @SuppressWarnings("unchecked")
-        PennylanePage<Changelog> page = (PennylanePage<Changelog>) AbstractPennylaneTask.request(
+        AbstractPennylaneTask.ChangelogSync sync = AbstractPennylaneTask.syncChangelogs(
             runContext,
-            null,
-            token,
-            requestBuilder,
-            pageType
-        ).getBody();
-
-        List<Changelog> changes = page != null && page.getItems() != null ? page.getItems() : List.of();
-
-        if (changes.isEmpty()) {
-            return Optional.empty();
-        }
-
-        // Find the most recent non-deleted change to fetch full invoice details
-        SupplierInvoice invoice = null;
-        for (Changelog change : changes) {
-            String action = change.getAction();
-            if (action != null && (action.equalsIgnoreCase("delete") || action.equalsIgnoreCase("deleted"))) {
-                continue;
-            }
-
-            Long invoiceId = change.getResourceId();
-            if (invoiceId == null) {
-                continue;
-            }
-
-            try {
-                String invoiceUrl = AbstractPennylaneTask.join(baseUrlStr, "supplier_invoices/" + invoiceId);
-                var invoiceRequest = HttpRequest.builder()
-                    .uri(URI.create(invoiceUrl))
-                    .method("GET");
-
-                invoice = AbstractPennylaneTask.request(
-                    runContext,
-                    null,
-                    token,
-                    invoiceRequest,
-                    SupplierInvoice.class
-                ).getBody();
-
-                if (invoice != null) {
-                    break;
-                }
-            } catch (Exception e) {
-                runContext.logger().debug("Could not fetch supplier invoice {}: {}", invoiceId, e.getMessage());
-            }
-        }
-
-        Map<String, Object> outputs = new LinkedHashMap<>();
-        outputs.put("invoice", invoice);
-        outputs.put("changeCount", changes.size());
-
-        Execution execution = TriggerService.generateExecution(this, conditionContext, context, outputs);
-
-        runContext.logger().info(
-            "Pennylane SupplierInvoiceTrigger fired: {} new/updated supplier invoice(s) since {}",
-            changes.size(),
-            since
+            this.options,
+            rApiToken,
+            rBaseUrl,
+            "supplier_invoices",
+            previous,
+            lookback
         );
 
-        return Optional.of(execution);
+        List<SupplierInvoice> invoices = new ArrayList<>();
+        for (Changelog change : sync.unseen()) {
+            if (change.deleted() || change.getId() == null) {
+                continue;
+            }
+            SupplierInvoice invoice = AbstractPennylaneTask.fetchById(
+                runContext,
+                this.options,
+                rApiToken,
+                rBaseUrl,
+                "supplier_invoices/" + change.getId(),
+                SupplierInvoice.class
+            );
+            if (invoice != null) {
+                invoices.add(invoice);
+            }
+        }
+
+        Optional<Execution> execution = Optional.empty();
+        if (!invoices.isEmpty()) {
+            Map<String, Object> outputs = new LinkedHashMap<>();
+            outputs.put("invoice", invoices.getLast());
+            outputs.put("invoices", invoices);
+            outputs.put("changeCount", sync.unseen().size());
+            execution = Optional.of(TriggerService.generateExecution(this, conditionContext, context, outputs));
+            runContext.logger().info(
+                "Pennylane SupplierInvoiceTrigger fired: {} supplier invoice(s) from {} changelog event(s)",
+                invoices.size(),
+                sync.unseen().size()
+            );
+        }
+
+        PennylaneWatermark.save(runContext, namespace, watermarkKey, sync.next());
+        return execution;
     }
 }

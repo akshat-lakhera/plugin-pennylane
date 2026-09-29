@@ -55,27 +55,42 @@ class AccountingTest {
         wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/trial_balance"))
             .withQueryParam("period_start", equalTo("2024-01-01"))
             .withQueryParam("period_end", equalTo("2024-12-31"))
+            .withQueryParam("cursor", absent())
             .willReturn(aResponse()
                 .withStatus(200)
                 .withHeader("Content-Type", "application/json")
                 .withBody("""
                     {
-                        "total_debit": "150000.00",
-                        "total_credit": "150000.00",
-                        "ledger_accounts": [
+                        "has_more": true,
+                        "next_cursor": "tb-2",
+                        "items": [
                             {
-                                "ledger_account_number": "401000",
-                                "ledger_account_label": "Suppliers",
-                                "debit": "50000.00",
-                                "credit": "0.00",
-                                "balance": "50000.00"
-                            },
+                                "number": "401000",
+                                "formatted_number": "401000",
+                                "label": "Suppliers",
+                                "debits": "50000.00",
+                                "credits": "0.00"
+                            }
+                        ]
+                    }
+                    """)));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/trial_balance"))
+            .withQueryParam("cursor", equalTo("tb-2"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
                             {
-                                "ledger_account_number": "411000",
-                                "ledger_account_label": "Customers",
-                                "debit": "100000.00",
-                                "credit": "150000.00",
-                                "balance": "-50000.00"
+                                "number": "411000",
+                                "formatted_number": "411000",
+                                "label": "Customers",
+                                "debits": "100000.00",
+                                "credits": "150000.00"
                             }
                         ]
                     }
@@ -97,8 +112,74 @@ class AccountingTest {
         assertThat(output.getRows(), hasSize(2));
         assertThat(output.getRows().get(0).getNumber(), is("401000"));
         assertThat(output.getRows().get(0).getLabel(), is("Suppliers"));
+        assertThat(output.getRows().get(0).getDebits(), is("50000.00"));
+        assertThat(output.getRows().get(0).getCredits(), is("0.00"));
         assertThat(output.getRows().get(1).getNumber(), is("411000"));
-        assertThat(output.getRows().get(1).getLabel(), is("Customers"));
+        assertThat(output.getRows().get(1).getDebits(), is("100000.00"));
+        assertThat(output.getRows().get(1).getCredits(), is("150000.00"));
+        wireMockServer.verify(getRequestedFor(urlPathEqualTo("/api/external/v2/trial_balance"))
+            .withQueryParam("cursor", equalTo("tb-2"))
+            .withQueryParam("period_start", equalTo("2024-01-01"))
+            .withQueryParam("period_end", equalTo("2024-12-31")));
+    }
+
+    @Test
+    void testLedgerEntriesListFollowsPages() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("1"))
+            .withQueryParam("per_page", equalTo("100"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "total_pages": 2,
+                        "current_page": 1,
+                        "total_items": 2,
+                        "per_page": 100,
+                        "items": [
+                            {"id": 11, "label": "Rent", "date": "2024-01-15", "journal_id": 12}
+                        ]
+                    }
+                    """)));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("2"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "total_pages": 2,
+                        "current_page": 2,
+                        "total_items": 2,
+                        "per_page": 100,
+                        "items": [
+                            {"id": 12, "label": "Sale", "date": "2024-01-16", "journal_id": 12, "ledger_attachment_filename": "sale.pdf"}
+                        ]
+                    }
+                    """)));
+
+        var task = io.kestra.plugin.pennylane.accounting.ledgerentries.List.builder()
+            .id("test-ledger-entries-list")
+            .type(io.kestra.plugin.pennylane.accounting.ledgerentries.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .journalId(Property.ofValue(12L))
+            .dateFrom(Property.ofValue("2024-01-01"))
+            .dateTo(Property.ofValue("2024-01-31"))
+            .build();
+
+        RunContext rc = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        var output = task.run(rc);
+
+        assertThat(output.getCount(), is(2));
+        assertThat(output.getRows().get(0).getLabel(), is("Rent"));
+        assertThat(output.getRows().get(1).getId(), is(12L));
+        assertThat(output.getRows().get(1).getLedgerAttachmentFilename(), is("sale.pdf"));
+        wireMockServer.verify(getRequestedFor(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("2"))
+            .withQueryParam("filter", containing("journal_id")));
     }
 
     @Test

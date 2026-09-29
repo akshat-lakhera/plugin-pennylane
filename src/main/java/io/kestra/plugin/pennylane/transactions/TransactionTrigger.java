@@ -1,6 +1,6 @@
 package io.kestra.plugin.pennylane.transactions;
 
-import io.kestra.core.http.HttpRequest;
+import io.kestra.core.http.client.configurations.HttpConfiguration;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -13,10 +13,12 @@ import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
+import io.kestra.plugin.pennylane.PennylaneWatermark;
+import io.kestra.plugin.pennylane.models.Changelog;
 import io.kestra.plugin.pennylane.models.PennylaneFilter;
-import io.kestra.plugin.pennylane.models.PennylanePage;
 import io.kestra.plugin.pennylane.models.Transaction;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -24,15 +26,14 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.net.URI;
 import java.time.Duration;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @SuperBuilder
 @ToString
@@ -41,10 +42,10 @@ import java.util.Optional;
 @NoArgsConstructor
 @Schema(
     title = "Trigger on new Pennylane bank transactions",
-    description = "Polls Pennylane bank transactions at a configurable interval. " +
-        "By default polls for uncategorized transactions on all or a specific bank account. " +
-        "Fires one execution per poll cycle when new transactions are detected. " +
-        "The most recent transaction is available as `trigger.transaction` in downstream tasks."
+    description = "Polls GET /changelogs/transactions, then loads those transactions with an id `in` filter. " +
+        "The transactions list allow-list is id, bank_account_id, journal_id, and date, so updated_at and categorized are not sent as query filters. " +
+        "`categorized` is applied after fetch: the boolean is used when present, otherwise a non-empty categories array counts as categorized. " +
+        "`bankAccountId` is sent as bank_account_id eq. A namespace KV watermark advances on every fully paged poll."
 )
 @Plugin(
     examples = {
@@ -60,6 +61,7 @@ import java.util.Optional;
                     type: io.kestra.plugin.pennylane.transactions.TransactionTrigger
                     apiToken: "{{ secret('PENNYLANE_API_TOKEN') }}"
                     interval: PT5M
+                    bankAccountId: 42
                     categorized: false
 
                 tasks:
@@ -76,6 +78,7 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
         title = "Pennylane API token",
         description = "Company or firm API token used to authenticate against the Pennylane API."
     )
+    @NotNull
     @PluginProperty(secret = true, group = "connection")
     @ToString.Exclude
     private Property<String> apiToken;
@@ -89,16 +92,24 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
     private Property<String> baseUrl = Property.ofValue(AbstractPennylaneTask.DEFAULT_BASE_URL);
 
     @Schema(
+        title = "HTTP client options",
+        description = "Optional HTTP client configuration (timeouts, proxy, SSL) applied to every request."
+    )
+    @PluginProperty(group = "advanced")
+    private HttpConfiguration options;
+
+    @Schema(
         title = "Bank account ID filter",
-        description = "Filters transactions belonging to a specific bank account. When omitted, all bank accounts are monitored."
+        description = "When set, fetched transactions are restricted with bank_account_id eq. This is a legal transactions list filter."
     )
     @PluginProperty(group = "processing")
     private Property<Long> bankAccountId;
 
     @Schema(
-        title = "Categorized filter",
-        description = "When set to false, only uncategorized (unmatched) transactions are returned. " +
-            "When set to true, only categorized transactions are returned. Omit for all transactions."
+        title = "Categorized post-filter",
+        description = "Applied in the plugin after the transactions are fetched, not as an API filter. " +
+            "When the payload has a categorized boolean it is used. Otherwise a transaction is treated as categorized when categories is non-empty. " +
+            "There is no categorized field on the v2 transaction object; attachment_required and categories are the live signals."
     )
     @PluginProperty(group = "processing")
     private Property<Boolean> categorized;
@@ -119,91 +130,101 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
         RunContext runContext = conditionContext.getRunContext();
+        String rApiToken = AbstractPennylaneTask.renderApiToken(runContext, this.apiToken);
+        String rBaseUrl = AbstractPennylaneTask.renderBaseUrl(runContext, this.baseUrl);
+        String namespace = conditionContext.getFlow().getNamespace();
+        String watermarkKey = PennylaneWatermark.key(conditionContext.getFlow().getId(), this.getId());
+        PennylaneWatermark.State previous = PennylaneWatermark.load(runContext, namespace, watermarkKey);
+        String lookback = PennylaneWatermark.initialStart(context.getDate(), this.interval);
 
-        String token = AbstractPennylaneTask.renderApiToken(runContext, this.apiToken);
-        String baseUrlStr = AbstractPennylaneTask.renderBaseUrl(runContext, this.baseUrl);
+        Long rBankAccountId = this.bankAccountId == null
+            ? null
+            : runContext.render(this.bankAccountId).as(Long.class).orElse(null);
+        Boolean rCategorized = this.categorized == null
+            ? null
+            : runContext.render(this.categorized).as(Boolean.class).orElse(null);
 
-        // Compute since timestamp: last evaluation date minus one interval
-        String since = context.getDate()
-            .minus(this.interval)
-            .withZoneSameInstant(ZoneOffset.UTC)
-            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-
-        List<PennylaneFilter> filterList = new ArrayList<>();
-
-        // Filter by updated_at since last poll
-        filterList.add(PennylaneFilter.builder()
-            .field("updated_at")
-            .operator("gteq")
-            .value(since)
-            .build()
-        );
-
-        if (this.bankAccountId != null) {
-            runContext.render(this.bankAccountId).as(Long.class).ifPresent(id ->
-                filterList.add(PennylaneFilter.builder()
-                    .field("bank_account_id")
-                    .operator("eq")
-                    .value(id)
-                    .build())
-            );
-        }
-
-        if (this.categorized != null) {
-            runContext.render(this.categorized).as(Boolean.class).ifPresent(cat ->
-                filterList.add(PennylaneFilter.builder()
-                    .field("categorized")
-                    .operator("eq")
-                    .value(cat)
-                    .build())
-            );
-        }
-
-        Map<String, String> queryParams = new LinkedHashMap<>();
-        queryParams.put("limit", "100");
-        queryParams.put("sort", "-id");
-        queryParams.put("filter", AbstractPennylaneTask.MAPPER.writeValueAsString(filterList));
-
-        String url = AbstractPennylaneTask.buildUriWithParams(baseUrlStr, "transactions", queryParams);
-
-        var requestBuilder = HttpRequest.builder()
-            .uri(URI.create(url))
-            .method("GET");
-
-        var pageType = AbstractPennylaneTask.MAPPER
-            .getTypeFactory()
-            .constructParametricType(PennylanePage.class, Transaction.class);
-
-        @SuppressWarnings("unchecked")
-        PennylanePage<Transaction> page = (PennylanePage<Transaction>) AbstractPennylaneTask.request(
+        AbstractPennylaneTask.ChangelogSync sync = AbstractPennylaneTask.syncChangelogs(
             runContext,
-            null,
-            token,
-            requestBuilder,
-            pageType
-        ).getBody();
-
-        List<Transaction> items = page != null && page.getItems() != null ? page.getItems() : List.of();
-
-        if (items.isEmpty()) {
-            return Optional.empty();
-        }
-
-        Transaction latest = items.get(0);
-
-        Map<String, Object> outputs = new LinkedHashMap<>();
-        outputs.put("transaction", latest);
-        outputs.put("transactions", items);
-        outputs.put("transactionCount", items.size());
-
-        Execution execution = TriggerService.generateExecution(this, conditionContext, context, outputs);
-
-        runContext.logger().info(
-            "Pennylane TransactionTrigger fired: {} new transaction(s) since {}",
-            items.size(),
-            since
+            this.options,
+            rApiToken,
+            rBaseUrl,
+            "transactions",
+            previous,
+            lookback
         );
 
-        return Optional.of(execution);
+        List<Long> ids = new ArrayList<>();
+        for (Changelog change : sync.unseen()) {
+            if (!change.deleted() && change.getId() != null) {
+                ids.add(change.getId());
+            }
+        }
+
+        Map<Long, Transaction> byId = new LinkedHashMap<>();
+        for (int offset = 0; offset < ids.size(); offset += AbstractPennylaneTask.MAX_LIST_PAGE_SIZE) {
+            List<Long> chunk = ids.subList(offset, Math.min(offset + AbstractPennylaneTask.MAX_LIST_PAGE_SIZE, ids.size()));
+            List<PennylaneFilter> filters = new ArrayList<>();
+            filters.add(PennylaneFilter.builder().field("id").operator("in").value(new ArrayList<>(chunk)).build());
+            if (rBankAccountId != null) {
+                filters.add(PennylaneFilter.builder().field("bank_account_id").operator("eq").value(rBankAccountId).build());
+            }
+            Map<String, String> queryParams = new LinkedHashMap<>();
+            queryParams.put("limit", String.valueOf(AbstractPennylaneTask.MAX_LIST_PAGE_SIZE));
+            queryParams.put("filter", AbstractPennylaneTask.MAPPER.writeValueAsString(filters));
+
+            List<Transaction> batch = AbstractPennylaneTask.listAll(
+                runContext,
+                this.options,
+                rApiToken,
+                rBaseUrl,
+                "transactions",
+                queryParams,
+                Transaction.class,
+                AbstractPennylaneTask.PageMode.STANDARD,
+                null
+            );
+            for (Transaction transaction : batch) {
+                if (transaction.getId() != null) {
+                    byId.put(transaction.getId(), transaction);
+                }
+            }
+        }
+
+        List<Transaction> matched = new ArrayList<>();
+        Set<Long> emitted = new LinkedHashSet<>();
+        for (Long id : ids) {
+            Transaction transaction = byId.get(id);
+            if (transaction == null || !emitted.add(id)) {
+                continue;
+            }
+            if (rCategorized != null && transaction.isCategorizedForFilter() != rCategorized) {
+                continue;
+            }
+            if (rBankAccountId != null) {
+                Long resolved = transaction.resolvedBankAccountId();
+                if (resolved != null && !resolved.equals(rBankAccountId)) {
+                    continue;
+                }
+            }
+            matched.add(transaction);
+        }
+
+        Optional<Execution> execution = Optional.empty();
+        if (!matched.isEmpty()) {
+            Map<String, Object> outputs = new LinkedHashMap<>();
+            outputs.put("transaction", matched.getLast());
+            outputs.put("transactions", matched);
+            outputs.put("transactionCount", matched.size());
+            execution = Optional.of(TriggerService.generateExecution(this, conditionContext, context, outputs));
+            runContext.logger().info(
+                "Pennylane TransactionTrigger fired: {} transaction(s) from {} changelog event(s)",
+                matched.size(),
+                sync.unseen().size()
+            );
+        }
+
+        PennylaneWatermark.save(runContext, namespace, watermarkKey, sync.next());
+        return execution;
     }
 }
