@@ -36,7 +36,7 @@ import java.util.Map;
 @Plugin(
     examples = {
         @Example(
-            title = "List unpaid supplier invoices and store in internal storage",
+            title = "List supplier invoices waiting to be paid and store them in internal storage",
             full = true,
             code = """
                 id: pennylane_supplier_invoices
@@ -47,7 +47,7 @@ import java.util.Map;
                     type: io.kestra.plugin.pennylane.supplierinvoices.List
                     apiToken: "{{ secret('PENNYLANE_API_TOKEN') }}"
                     dateFrom: "2026-01-01"
-                    paymentStatus: "not_paid"
+                    paymentStatus: "to_be_paid"
                     fetchType: STORE
                 """
         )
@@ -78,10 +78,17 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Payment status",
-        description = "Filters invoices by payment status, e.g. 'paid', 'not_paid', or 'partially_paid'."
+        description = "Filters invoices by payment_status eq. Values: to_be_processed, to_be_paid, partially_paid, payment_error, payment_scheduled, payment_in_progress, payment_emitted, payment_found, paid_offline, fully_paid."
     )
     @PluginProperty(group = "processing")
     private Property<String> paymentStatus;
+
+    @Schema(
+        title = "Category identifiers",
+        description = "Filters supplier invoices in any of these categories. Sent as category_id with operator in, which is the only operator that endpoint allows for category_id."
+    )
+    @PluginProperty(group = "processing")
+    private Property<java.util.List<Long>> categoryIds;
 
     @Schema(
         title = "Raw Pennylane filter DSL",
@@ -100,7 +107,9 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Page size",
-        description = "Number of items per request page (1 to 100). Defaults to 100."
+        description = "Number of items per request page. Must be between 1 and 100. Defaults to 100.",
+        minimum = "1",
+        maximum = "100"
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -108,7 +117,8 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Maximum records",
-        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records."
+        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records. Must be at least 1 when set.",
+        minimum = "1"
     )
     @PluginProperty(group = "processing")
     private Property<Integer> maxRecords;
@@ -125,11 +135,11 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
     public Output run(RunContext runContext) throws Exception {
         Map<String, String> queryParams = new LinkedHashMap<>();
 
-        int limit = runContext.render(this.pageSize).as(Integer.class).orElse(100);
-        queryParams.put("limit", String.valueOf(Math.min(100, Math.max(1, limit))));
+        int rPageSize = renderPageSize(runContext, this.pageSize, MAX_LIST_PAGE_SIZE);
+        queryParams.put("limit", String.valueOf(rPageSize));
 
-        String sortVal = runContext.render(this.sort).as(String.class).orElse("-id");
-        queryParams.put("sort", sortVal);
+        String rSort = runContext.render(this.sort).as(String.class).orElse("-id");
+        queryParams.put("sort", rSort);
 
         java.util.List<PennylaneFilter> filterList = new ArrayList<>();
 
@@ -157,6 +167,13 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
             );
         }
 
+        if (this.categoryIds != null) {
+            java.util.List<Long> rCategoryIds = runContext.render(this.categoryIds).asList(Long.class);
+            if (rCategoryIds != null && !rCategoryIds.isEmpty()) {
+                filterList.add(PennylaneFilter.builder().field("category_id").operator("in").value(rCategoryIds).build());
+            }
+        }
+
         if (this.filter != null) {
             String rawFilter = runContext.render(this.filter).as(String.class).orElse(null);
             if (rawFilter != null && !rawFilter.isBlank()) {
@@ -172,16 +189,17 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
             queryParams.put("filter", MAPPER.writeValueAsString(filterList));
         }
 
-        Integer max = runContext.render(this.maxRecords).as(Integer.class).orElse(null);
-        java.util.List<SupplierInvoice> items = paginate(
+        Integer rMaxRecords = renderMaxRecords(runContext, this.maxRecords);
+        FetchResult<SupplierInvoice> result = drain(
             runContext,
             "supplier_invoices",
             queryParams,
             SupplierInvoice.class,
-            max
+            this.fetchType,
+            rMaxRecords,
+            PageMode.STANDARD,
+            null
         );
-
-        FetchResult<SupplierInvoice> result = fetchOutput(runContext, this.fetchType, items);
 
         return Output.builder()
             .rows(result.rows())

@@ -1,4 +1,4 @@
-package io.kestra.plugin.pennylane.accounting.ledgerentrylines;
+package io.kestra.plugin.pennylane.accounting.ledgerentries;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import io.kestra.core.models.annotations.Example;
@@ -9,7 +9,7 @@ import io.kestra.core.models.tasks.RunnableTask;
 import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
-import io.kestra.plugin.pennylane.models.LedgerEntryLine;
+import io.kestra.plugin.pennylane.models.LedgerEntry;
 import io.kestra.plugin.pennylane.models.PennylaneFilter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
@@ -30,22 +30,24 @@ import java.util.Map;
 @Getter
 @NoArgsConstructor
 @Schema(
-    title = "List Pennylane ledger entry lines",
-    description = "Retrieves ledger entry lines from Pennylane with cursor pagination and filtering by date or ledger account."
+    title = "List Pennylane ledger entries",
+    description = "Lists ledger entries from GET /ledger_entries. Pennylane API v2 has no journal_entries resource; ledger entries are the replacement. " +
+        "Pagination is page and per_page, not a cursor. Legal filters include date (lt, lteq, gt, gteq, eq, not_eq) and journal_id (those operators plus in and not_in)."
 )
 @Plugin(
     examples = {
         @Example(
-            title = "List ledger entry lines for Q1 2026",
+            title = "List ledger entries for a journal and date range",
             full = true,
             code = """
-                id: pennylane_ledger_entry_lines
+                id: pennylane_ledger_entries
                 namespace: company.finance
 
                 tasks:
-                  - id: entry_lines
-                    type: io.kestra.plugin.pennylane.accounting.ledgerentrylines.List
+                  - id: ledger_entries
+                    type: io.kestra.plugin.pennylane.accounting.ledgerentries.List
                     apiToken: "{{ secret('PENNYLANE_API_TOKEN') }}"
+                    journalId: 12
                     dateFrom: "2026-01-01"
                     dateTo: "2026-03-31"
                     fetchType: STORE
@@ -56,54 +58,54 @@ import java.util.Map;
 public class List extends AbstractPennylaneTask implements RunnableTask<List.Output> {
 
     @Schema(
+        title = "Journal identifier",
+        description = "Filters ledger entries for this journal. Sent as journal_id eq."
+    )
+    @PluginProperty(group = "processing")
+    private Property<Long> journalId;
+
+    @Schema(
         title = "Entry start date",
-        description = "Filters ledger entry lines with a date on or after this value (format YYYY-MM-DD)."
+        description = "Filters ledger entries on or after this date (YYYY-MM-DD). Sent as date gteq."
     )
     @PluginProperty(group = "processing")
     private Property<String> dateFrom;
 
     @Schema(
         title = "Entry end date",
-        description = "Filters ledger entry lines with a date on or before this value (format YYYY-MM-DD)."
+        description = "Filters ledger entries on or before this date (YYYY-MM-DD). Sent as date lteq."
     )
     @PluginProperty(group = "processing")
     private Property<String> dateTo;
 
     @Schema(
-        title = "Ledger account identifier",
-        description = "Filters entry lines for a specific ledger account ID."
-    )
-    @PluginProperty(group = "processing")
-    private Property<Long> ledgerAccountId;
-
-    @Schema(
         title = "Raw Pennylane filter DSL",
-        description = "Raw JSON filter string matching Pennylane filter DSL."
+        description = "Raw JSON filter string. Allowed fields are date and journal_id."
     )
     @PluginProperty(group = "processing")
     private Property<String> filter;
 
     @Schema(
         title = "Sort order",
-        description = "Attribute to sort by. Defaults to '-id'."
+        description = "Sort by updated_at, created_at, or date, optionally prefixed with '-' for descending order. Defaults to '-date'."
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<String> sort = Property.ofValue("-id");
+    private Property<String> sort = Property.ofValue("-date");
 
     @Schema(
         title = "Page size",
-        description = "Number of items per request page. Must be between 1 and 100. Defaults to 100.",
+        description = "Number of ledger entries per page (1 to 100). Defaults to 100. Sent as per_page.",
         minimum = "1",
         maximum = "100"
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Integer> pageSize = Property.ofValue(100);
+    private Property<Integer> pageSize = Property.ofValue(DEFAULT_PAGE_SIZE);
 
     @Schema(
         title = "Maximum records",
-        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records. Must be at least 1 when set.",
+        description = "Maximum total number of ledger entries to retrieve across all pages. Omit to fetch all. Must be at least 1 when set.",
         minimum = "1"
     )
     @PluginProperty(group = "processing")
@@ -119,59 +121,47 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Map<String, String> queryParams = new LinkedHashMap<>();
-
         int rPageSize = renderPageSize(runContext, this.pageSize, MAX_LIST_PAGE_SIZE);
-        queryParams.put("limit", String.valueOf(rPageSize));
+        Integer rMaxRecords = renderMaxRecords(runContext, this.maxRecords);
+        String rSort = runContext.render(this.sort).as(String.class).orElse("-date");
 
-        String rSort = runContext.render(this.sort).as(String.class).orElse("-id");
+        Map<String, String> queryParams = new LinkedHashMap<>();
         queryParams.put("sort", rSort);
 
         java.util.List<PennylaneFilter> filterList = new ArrayList<>();
-
+        if (this.journalId != null) {
+            runContext.render(this.journalId).as(Long.class).ifPresent(id ->
+                filterList.add(PennylaneFilter.builder().field("journal_id").operator("eq").value(id).build())
+            );
+        }
         if (this.dateFrom != null) {
-            runContext.render(this.dateFrom).as(String.class).ifPresent(d ->
-                filterList.add(PennylaneFilter.builder().field("date").operator("gteq").value(d).build())
+            runContext.render(this.dateFrom).as(String.class).ifPresent(date ->
+                filterList.add(PennylaneFilter.builder().field("date").operator("gteq").value(date).build())
             );
         }
-
         if (this.dateTo != null) {
-            runContext.render(this.dateTo).as(String.class).ifPresent(d ->
-                filterList.add(PennylaneFilter.builder().field("date").operator("lteq").value(d).build())
+            runContext.render(this.dateTo).as(String.class).ifPresent(date ->
+                filterList.add(PennylaneFilter.builder().field("date").operator("lteq").value(date).build())
             );
         }
-
-        if (this.ledgerAccountId != null) {
-            runContext.render(this.ledgerAccountId).as(Long.class).ifPresent(id ->
-                filterList.add(PennylaneFilter.builder().field("ledger_account_id").operator("eq").value(id).build())
-            );
-        }
-
         if (this.filter != null) {
             String rawFilter = runContext.render(this.filter).as(String.class).orElse(null);
             if (rawFilter != null && !rawFilter.isBlank()) {
-                java.util.List<PennylaneFilter> parsed = MAPPER.readValue(
-                    rawFilter,
-                    new TypeReference<java.util.List<PennylaneFilter>>() {}
-                );
-                filterList.addAll(parsed);
+                filterList.addAll(MAPPER.readValue(rawFilter, new TypeReference<java.util.List<PennylaneFilter>>() {}));
             }
         }
-
         if (!filterList.isEmpty()) {
             queryParams.put("filter", MAPPER.writeValueAsString(filterList));
         }
 
-        Integer rMaxRecords = renderMaxRecords(runContext, this.maxRecords);
-        FetchResult<LedgerEntryLine> result = drain(
+        FetchResult<LedgerEntry> result = drainOffset(
             runContext,
-            "ledger_entry_lines",
+            "ledger_entries",
             queryParams,
-            LedgerEntryLine.class,
+            LedgerEntry.class,
             this.fetchType,
             rMaxRecords,
-            PageMode.STANDARD,
-            null
+            rPageSize
         );
 
         return Output.builder()
@@ -185,16 +175,16 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
     @Builder
     @Getter
     public static class Output implements io.kestra.core.models.tasks.Output {
-        @Schema(title = "List of ledger entry lines (populated when fetchType is FETCH)")
-        private final java.util.List<LedgerEntryLine> rows;
+        @Schema(title = "List of ledger entries (populated when fetchType is FETCH)")
+        private final java.util.List<LedgerEntry> rows;
 
-        @Schema(title = "First ledger entry line (populated when fetchType is FETCH_ONE)")
-        private final LedgerEntryLine row;
+        @Schema(title = "First ledger entry (populated when fetchType is FETCH_ONE)")
+        private final LedgerEntry row;
 
         @Schema(title = "URI of the stored .ion internal storage file (populated when fetchType is STORE)")
         private final URI uri;
 
-        @Schema(title = "Total number of ledger entry lines retrieved")
+        @Schema(title = "Total number of ledger entries retrieved")
         private final Integer count;
     }
 }

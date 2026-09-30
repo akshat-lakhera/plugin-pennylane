@@ -60,7 +60,7 @@ public class SupplierInvoice {
     @JsonProperty("currency_tax")
     private Object currencyTax;
 
-    @Schema(title = "Payment status, e.g. 'paid', 'not_paid', 'partially_paid'")
+    @Schema(title = "Payment status. One of to_be_processed, to_be_paid, partially_paid, payment_error, payment_scheduled, payment_in_progress, payment_emitted, payment_found, paid_offline, fully_paid")
     @JsonProperty("payment_status")
     private String paymentStatus;
 

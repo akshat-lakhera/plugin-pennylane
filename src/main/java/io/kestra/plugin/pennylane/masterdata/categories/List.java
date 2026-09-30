@@ -77,7 +77,9 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Page size",
-        description = "Number of items per request page (1 to 100). Defaults to 100."
+        description = "Number of items per request page. Must be between 1 and 100. Defaults to 100.",
+        minimum = "1",
+        maximum = "100"
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -85,7 +87,8 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Maximum records",
-        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records."
+        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records. Must be at least 1 when set.",
+        minimum = "1"
     )
     @PluginProperty(group = "processing")
     private Property<Integer> maxRecords;
@@ -102,11 +105,11 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
     public Output run(RunContext runContext) throws Exception {
         Map<String, String> queryParams = new LinkedHashMap<>();
 
-        int limit = runContext.render(this.pageSize).as(Integer.class).orElse(100);
-        queryParams.put("limit", String.valueOf(Math.min(100, Math.max(1, limit))));
+        int rPageSize = renderPageSize(runContext, this.pageSize, MAX_LIST_PAGE_SIZE);
+        queryParams.put("limit", String.valueOf(rPageSize));
 
-        String sortVal = runContext.render(this.sort).as(String.class).orElse("-id");
-        queryParams.put("sort", sortVal);
+        String rSort = runContext.render(this.sort).as(String.class).orElse("-id");
+        queryParams.put("sort", rSort);
 
         java.util.List<PennylaneFilter> filterList = new ArrayList<>();
 
@@ -131,16 +134,17 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
             queryParams.put("filter", MAPPER.writeValueAsString(filterList));
         }
 
-        Integer max = runContext.render(this.maxRecords).as(Integer.class).orElse(null);
-        java.util.List<Category> items = paginate(
+        Integer rMaxRecords = renderMaxRecords(runContext, this.maxRecords);
+        FetchResult<Category> result = drain(
             runContext,
             "categories",
             queryParams,
             Category.class,
-            max
+            this.fetchType,
+            rMaxRecords,
+            PageMode.STANDARD,
+            null
         );
-
-        FetchResult<Category> result = fetchOutput(runContext, this.fetchType, items);
 
         return Output.builder()
             .rows(result.rows())

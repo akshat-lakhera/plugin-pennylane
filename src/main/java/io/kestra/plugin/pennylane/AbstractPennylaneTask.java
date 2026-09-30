@@ -16,6 +16,8 @@ import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.serializers.JacksonMapper;
+import io.kestra.plugin.pennylane.models.Changelog;
+import io.kestra.plugin.pennylane.models.PennylaneOffsetPage;
 import io.kestra.plugin.pennylane.models.PennylanePage;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
@@ -28,6 +30,7 @@ import lombok.experimental.SuperBuilder;
 import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -37,6 +40,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 /**
  * Shared authentication, HTTP transport, rate-limiting backoff, and pagination logic for Pennylane tasks.
@@ -49,6 +53,11 @@ import java.util.Map;
 public abstract class AbstractPennylaneTask extends Task {
 
     public static final String DEFAULT_BASE_URL = "https://app.pennylane.com/api/external/v2";
+    public static final int DEFAULT_PAGE_SIZE = 100;
+    public static final int MAX_LIST_PAGE_SIZE = 100;
+    public static final int MAX_CHANGELOG_PAGE_SIZE = 1000;
+    public static final int MAX_TRIAL_BALANCE_PAGE_SIZE = 1000;
+    private static final int MAX_PAGES = 1000;
     private static final int MAX_RETRIES = 5;
     private static final long INITIAL_BACKOFF_MS = 1000L;
     private static final long MAX_BACKOFF_MS = 30000L;
@@ -56,6 +65,11 @@ public abstract class AbstractPennylaneTask extends Task {
     public static final ObjectMapper MAPPER = JacksonMapper.ofJson(false)
         .copy()
         .configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE, true);
+
+    public enum PageMode {
+        STANDARD,
+        CHANGELOG
+    }
 
     @Schema(
         title = "Pennylane API token",
@@ -70,7 +84,6 @@ public abstract class AbstractPennylaneTask extends Task {
         title = "Pennylane API base URL",
         description = "Base endpoint URL for Pennylane API calls. Defaults to `" + DEFAULT_BASE_URL + "`."
     )
-    @NotNull
     @Builder.Default
     @PluginProperty(group = "connection")
     protected Property<String> baseUrl = Property.ofValue(DEFAULT_BASE_URL);
@@ -98,6 +111,31 @@ public abstract class AbstractPennylaneTask extends Task {
 
     public static String renderBaseUrl(RunContext runContext, Property<String> baseUrl) throws IllegalVariableEvaluationException {
         return runContext.render(baseUrl).as(String.class).orElse(DEFAULT_BASE_URL);
+    }
+
+    public static int renderPageSize(RunContext runContext, Property<Integer> pageSize, int maximum) throws IllegalVariableEvaluationException {
+        int rPageSize = pageSize == null
+            ? DEFAULT_PAGE_SIZE
+            : runContext.render(pageSize).as(Integer.class).orElse(DEFAULT_PAGE_SIZE);
+        if (rPageSize < 1 || rPageSize > maximum) {
+            throw new IllegalArgumentException("pageSize must be between 1 and " + maximum + " but was " + rPageSize);
+        }
+        return rPageSize;
+    }
+
+    public static Integer renderMaxRecords(RunContext runContext, Property<Integer> maxRecords) throws IllegalVariableEvaluationException {
+        if (maxRecords == null) {
+            return null;
+        }
+        var rendered = runContext.render(maxRecords).as(Integer.class);
+        if (rendered.isEmpty()) {
+            return null;
+        }
+        int rMaxRecords = rendered.get();
+        if (rMaxRecords < 1) {
+            throw new IllegalArgumentException("maxRecords must be greater than or equal to 1 but was " + rMaxRecords);
+        }
+        return rMaxRecords;
     }
 
     protected <RES> HttpResponse<RES> request(
@@ -197,6 +235,29 @@ public abstract class AbstractPennylaneTask extends Task {
         }
     }
 
+    public static <T> T fetchById(
+        RunContext runContext,
+        HttpConfiguration options,
+        String apiToken,
+        String baseUrl,
+        String path,
+        Class<T> type
+    ) {
+        try {
+            String url = join(baseUrl, path);
+            return request(
+                runContext,
+                options,
+                apiToken,
+                HttpRequest.builder().uri(URI.create(url)).method("GET"),
+                type
+            ).getBody();
+        } catch (Exception e) {
+            runContext.logger().warn("Skipping Pennylane resource {} after fetch failed: {}", path, e.getMessage());
+            return null;
+        }
+    }
+
     private static long parseRetryAfter(HttpClientResponseException e, long defaultDelayMs) {
         if (e.getResponse() != null && e.getResponse().getHeaders() != null) {
             var headers = e.getResponse().getHeaders();
@@ -271,89 +332,337 @@ public abstract class AbstractPennylaneTask extends Task {
         return sb.toString();
     }
 
-    /**
-     * Executes cursor-based pagination over a Pennylane list endpoint.
-     */
-    protected <T> List<T> paginate(
+    protected <T> FetchResult<T> drain(
         RunContext runContext,
         String endpointPath,
         Map<String, String> queryParams,
         Class<T> itemType,
-        Integer maxRecords
+        Property<FetchType> fetchType,
+        Integer maxRecords,
+        PageMode pageMode,
+        Predicate<T> include
     ) throws Exception {
-        List<T> allItems = new ArrayList<>();
-        String currentCursor = null;
-        String baseUrlStr = renderBaseUrl(runContext);
-        JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylanePage.class, itemType);
-
-        Map<String, String> activeParams = queryParams != null ? new LinkedHashMap<>(queryParams) : new LinkedHashMap<>();
-
-        while (true) {
-            if (currentCursor != null && !currentCursor.isBlank()) {
-                activeParams.put("cursor", currentCursor);
-            } else {
-                activeParams.remove("cursor");
-            }
-
-            String fullUrl = buildUriWithParams(baseUrlStr, endpointPath, activeParams);
-            var requestBuilder = HttpRequest.builder()
-                .uri(URI.create(fullUrl))
-                .method("GET");
-
-            @SuppressWarnings("unchecked")
-            PennylanePage<T> page = (PennylanePage<T>) request(runContext, requestBuilder, pageType).getBody();
-
-            if (page != null && page.getItems() != null && !page.getItems().isEmpty()) {
-                for (T item : page.getItems()) {
-                    allItems.add(item);
-                    if (maxRecords != null && allItems.size() >= maxRecords) {
-                        return allItems;
-                    }
-                }
-            }
-
-            if (page == null || !Boolean.TRUE.equals(page.getHasMore()) ||
-                page.getNextCursor() == null || page.getNextCursor().isBlank()) {
-                break;
-            }
-
-            currentCursor = page.getNextCursor();
-        }
-
-        return allItems;
+        FetchType resolved = fetchType == null
+            ? FetchType.FETCH
+            : runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        String rApiToken = renderApiToken(runContext);
+        String rBaseUrl = renderBaseUrl(runContext);
+        return collect(runContext, resolved, consumer -> forEachIncludedPage(
+            runContext,
+            this.options,
+            rApiToken,
+            rBaseUrl,
+            endpointPath,
+            queryParams,
+            itemType,
+            pageMode,
+            include,
+            maxRecords,
+            consumer
+        ));
     }
 
-    /**
-     * Handles FetchType processing for lists of items:
-     * - FETCH: in-memory list
-     * - FETCH_ONE: single item
-     * - STORE: writes rows to .ion internal storage file
-     * - NONE: only total count
-     */
-    protected <T> FetchResult<T> fetchOutput(
+    protected <T> FetchResult<T> drainOffset(
         RunContext runContext,
+        String endpointPath,
+        Map<String, String> queryParams,
+        Class<T> itemType,
         Property<FetchType> fetchType,
-        List<T> items
+        Integer maxRecords,
+        int perPage
     ) throws Exception {
-        var total = items.size();
-        FetchType type = runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        FetchType resolved = fetchType == null
+            ? FetchType.FETCH
+            : runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        String rApiToken = renderApiToken(runContext);
+        String rBaseUrl = renderBaseUrl(runContext);
+        return collect(runContext, resolved, consumer -> forEachOffsetPage(
+            runContext,
+            this.options,
+            rApiToken,
+            rBaseUrl,
+            endpointPath,
+            queryParams,
+            itemType,
+            perPage,
+            maxRecords,
+            consumer
+        ));
+    }
 
+    public static <T> List<T> listAll(
+        RunContext runContext,
+        HttpConfiguration options,
+        String apiToken,
+        String baseUrl,
+        String endpointPath,
+        Map<String, String> queryParams,
+        Class<T> itemType,
+        PageMode pageMode,
+        Predicate<T> include
+    ) throws Exception {
+        List<T> items = new ArrayList<>();
+        forEachIncludedPage(
+            runContext,
+            options,
+            apiToken,
+            baseUrl,
+            endpointPath,
+            queryParams,
+            itemType,
+            pageMode,
+            include,
+            null,
+            items::addAll
+        );
+        return items;
+    }
+
+    public record ChangelogSync(List<Changelog> unseen, PennylaneWatermark.State next) {
+    }
+
+    public static ChangelogSync syncChangelogs(
+        RunContext runContext,
+        HttpConfiguration options,
+        String apiToken,
+        String baseUrl,
+        String resource,
+        PennylaneWatermark.State previous,
+        String lookbackStart
+    ) throws Exception {
+        String startDate = previous != null && previous.processedAt() != null && !previous.processedAt().isBlank()
+            ? previous.processedAt()
+            : lookbackStart;
+        Map<String, String> queryParams = new LinkedHashMap<>();
+        queryParams.put("limit", String.valueOf(MAX_CHANGELOG_PAGE_SIZE));
+        if (startDate != null && !startDate.isBlank()) {
+            queryParams.put("start_date", startDate);
+        }
+
+        List<Changelog> fetched = listAll(
+            runContext,
+            options,
+            apiToken,
+            baseUrl,
+            "changelogs/" + resource,
+            queryParams,
+            Changelog.class,
+            PageMode.CHANGELOG,
+            null
+        );
+
+        List<Changelog> unseen = new ArrayList<>();
+        for (Changelog change : fetched) {
+            if (!PennylaneWatermark.alreadySeen(change, previous)) {
+                unseen.add(change);
+            }
+        }
+        return new ChangelogSync(unseen, PennylaneWatermark.advance(fetched, previous, startDate));
+    }
+
+    private static <T> FetchResult<T> collect(
+        RunContext runContext,
+        FetchType type,
+        Pager<T> pager
+    ) throws Exception {
+        Accumulator<T> acc = new Accumulator<>();
+        java.io.File tempFile = null;
+        BufferedWriter writer = null;
+        try {
+            if (type == FetchType.STORE) {
+                tempFile = runContext.workingDir().createTempFile(".ion").toFile();
+                writer = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8);
+            }
+            BufferedWriter storeWriter = writer;
+            pager.page(page -> {
+                if (page.isEmpty()) {
+                    return;
+                }
+                if (acc.first == null) {
+                    acc.first = page.getFirst();
+                }
+                acc.count += page.size();
+                if (type == FetchType.FETCH) {
+                    acc.rows.addAll(page);
+                } else if (type == FetchType.STORE) {
+                    FileSerde.writeAll(storeWriter, Flux.fromIterable(page)).block();
+                }
+            });
+        } finally {
+            if (writer != null) {
+                writer.close();
+            }
+        }
+
+        URI uri = type == FetchType.STORE ? runContext.storage().putFile(tempFile) : null;
         return switch (type) {
-            case FETCH -> new FetchResult<>(items, null, null, total);
-            case FETCH_ONE -> new FetchResult<>(null, items.isEmpty() ? null : items.get(0), null, total);
-            case STORE -> new FetchResult<>(null, null, store(runContext, items), total);
-            case NONE -> new FetchResult<>(null, null, null, total);
+            case FETCH -> new FetchResult<>(acc.rows, null, null, acc.count);
+            case FETCH_ONE -> new FetchResult<>(null, acc.first, null, acc.count);
+            case STORE -> new FetchResult<>(null, null, uri, acc.count);
+            case NONE -> new FetchResult<>(null, null, null, acc.count);
         };
     }
 
-    private static <T> URI store(RunContext runContext, List<T> items) throws Exception {
-        var tempFile = runContext.workingDir().createTempFile(".ion").toFile();
+    private static <T> void forEachIncludedPage(
+        RunContext runContext,
+        HttpConfiguration options,
+        String apiToken,
+        String baseUrl,
+        String endpointPath,
+        Map<String, String> queryParams,
+        Class<T> itemType,
+        PageMode pageMode,
+        Predicate<T> include,
+        Integer maxRecords,
+        PageBatchConsumer<T> consumer
+    ) throws Exception {
+        Map<String, String> baseParams = queryParams != null ? queryParams : Map.of();
+        String cursor = null;
+        int pages = 0;
+        int accepted = 0;
+        JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylanePage.class, itemType);
 
-        try (var writer = Files.newBufferedWriter(tempFile.toPath(), StandardCharsets.UTF_8)) {
-            FileSerde.writeAll(writer, Flux.fromIterable(items)).block();
+        while (true) {
+            pages++;
+            if (pages > MAX_PAGES) {
+                throw new IllegalStateException("Pennylane pagination exceeded " + MAX_PAGES + " pages for " + endpointPath);
+            }
+
+            Map<String, String> requestParams = paramsForPage(baseParams, cursor, pageMode);
+            String fullUrl = buildUriWithParams(baseUrl, endpointPath, requestParams);
+            @SuppressWarnings("unchecked")
+            PennylanePage<T> page = (PennylanePage<T>) request(
+                runContext,
+                options,
+                apiToken,
+                HttpRequest.builder().uri(URI.create(fullUrl)).method("GET"),
+                pageType
+            ).getBody();
+
+            List<T> rawItems = page != null && page.getItems() != null ? page.getItems() : List.of();
+            List<T> included = take(rawItems, include, maxRecords, accepted);
+            accepted += included.size();
+            if (!included.isEmpty()) {
+                consumer.accept(included);
+            }
+            if (maxRecords != null && accepted >= maxRecords) {
+                return;
+            }
+            if (page == null || !Boolean.TRUE.equals(page.getHasMore())
+                || page.getNextCursor() == null || page.getNextCursor().isBlank()) {
+                return;
+            }
+            if (page.getNextCursor().equals(cursor)) {
+                throw new IllegalStateException("Pennylane pagination returned the same cursor twice for " + endpointPath);
+            }
+            cursor = page.getNextCursor();
         }
+    }
 
-        return runContext.storage().putFile(tempFile);
+    private static <T> void forEachOffsetPage(
+        RunContext runContext,
+        HttpConfiguration options,
+        String apiToken,
+        String baseUrl,
+        String endpointPath,
+        Map<String, String> queryParams,
+        Class<T> itemType,
+        int perPage,
+        Integer maxRecords,
+        PageBatchConsumer<T> consumer
+    ) throws Exception {
+        int pageNumber = 1;
+        int accepted = 0;
+        JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylaneOffsetPage.class, itemType);
+
+        while (pageNumber <= MAX_PAGES) {
+            Map<String, String> requestParams = new LinkedHashMap<>();
+            if (queryParams != null) {
+                requestParams.putAll(queryParams);
+            }
+            requestParams.put("page", Integer.toString(pageNumber));
+            requestParams.put("per_page", Integer.toString(perPage));
+
+            String fullUrl = buildUriWithParams(baseUrl, endpointPath, requestParams);
+            @SuppressWarnings("unchecked")
+            PennylaneOffsetPage<T> page = (PennylaneOffsetPage<T>) request(
+                runContext,
+                options,
+                apiToken,
+                HttpRequest.builder().uri(URI.create(fullUrl)).method("GET"),
+                pageType
+            ).getBody();
+
+            List<T> rawItems = page != null && page.getItems() != null ? page.getItems() : List.of();
+            List<T> included = take(rawItems, null, maxRecords, accepted);
+            accepted += included.size();
+            if (!included.isEmpty()) {
+                consumer.accept(included);
+            }
+            if (maxRecords != null && accepted >= maxRecords) {
+                return;
+            }
+
+            Integer totalPages = page != null ? page.getTotalPages() : null;
+            if (totalPages != null) {
+                if (pageNumber >= totalPages) {
+                    return;
+                }
+            } else if (rawItems.size() < perPage) {
+                return;
+            }
+            pageNumber++;
+        }
+        throw new IllegalStateException("Pennylane offset pagination exceeded " + MAX_PAGES + " pages for " + endpointPath);
+    }
+
+    private static Map<String, String> paramsForPage(Map<String, String> baseParams, String cursor, PageMode pageMode) {
+        Map<String, String> requestParams = new LinkedHashMap<>();
+        if (pageMode == PageMode.CHANGELOG && cursor != null) {
+            String limit = baseParams.get("limit");
+            if (limit != null) {
+                requestParams.put("limit", limit);
+            }
+            requestParams.put("cursor", cursor);
+            return requestParams;
+        }
+        requestParams.putAll(baseParams);
+        if (cursor != null) {
+            requestParams.put("cursor", cursor);
+        } else {
+            requestParams.remove("cursor");
+        }
+        return requestParams;
+    }
+
+    private static <T> List<T> take(List<T> rawItems, Predicate<T> include, Integer maxRecords, int already) {
+        List<T> included = new ArrayList<>();
+        for (T item : rawItems) {
+            if (include != null && !include.test(item)) {
+                continue;
+            }
+            if (maxRecords != null && already + included.size() >= maxRecords) {
+                break;
+            }
+            included.add(item);
+        }
+        return included;
+    }
+
+    @FunctionalInterface
+    private interface PageBatchConsumer<T> {
+        void accept(List<T> items) throws Exception;
+    }
+
+    @FunctionalInterface
+    private interface Pager<T> {
+        void page(PageBatchConsumer<T> consumer) throws Exception;
+    }
+
+    private static final class Accumulator<T> {
+        private int count;
+        private T first;
+        private final List<T> rows = new ArrayList<>();
     }
 
     public record FetchResult<T>(List<T> rows, T row, URI uri, int count) {

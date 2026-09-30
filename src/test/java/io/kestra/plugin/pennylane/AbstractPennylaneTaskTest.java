@@ -187,4 +187,19 @@ class AbstractPennylaneTaskTest {
         assertThat(output.getCount(), is(1));
         assertThat(output.getRows().get(0).getInvoiceNumber(), is("INV-RATE-LIMITED"));
     }
+
+    @Test
+    void testPageSizeIsNotClamped() {
+        List task = List.builder()
+            .id("test-page-size")
+            .type(List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .pageSize(Property.ofValue(500))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> task.run(runContext));
+        assertThat(ex.getMessage(), containsString("between 1 and 100"));
+    }
 }

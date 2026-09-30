@@ -59,12 +59,12 @@ public class Get extends AbstractPennylaneTask implements RunnableTask<Get.Outpu
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Long idVal = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
+        Long rInvoiceId = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
             () -> new IllegalArgumentException("invoiceId is required")
         );
 
-        String baseUrlStr = renderBaseUrl(runContext);
-        String url = join(baseUrlStr, "supplier_invoices/" + idVal);
+        String rBaseUrl = renderBaseUrl(runContext);
+        String url = join(rBaseUrl, "supplier_invoices/" + rInvoiceId);
 
         var requestBuilder = HttpRequest.builder()
             .uri(URI.create(url))

@@ -19,7 +19,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -63,12 +62,12 @@ public class Download extends AbstractPennylaneTask implements RunnableTask<Down
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Long id = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
+        Long rInvoiceId = runContext.render(this.invoiceId).as(Long.class).orElseThrow(
             () -> new IllegalArgumentException("invoiceId is required")
         );
 
-        String baseUrlStr = renderBaseUrl(runContext);
-        String url = join(baseUrlStr, "supplier_invoices/" + id);
+        String rBaseUrl = renderBaseUrl(runContext);
+        String url = join(rBaseUrl, "supplier_invoices/" + rInvoiceId);
 
         var requestBuilder = HttpRequest.builder()
             .uri(URI.create(url))
@@ -77,7 +76,7 @@ public class Download extends AbstractPennylaneTask implements RunnableTask<Down
         SupplierInvoice invoice = request(runContext, requestBuilder, SupplierInvoice.class).getBody();
 
         if (invoice == null) {
-            throw new IllegalArgumentException("Supplier invoice " + id + " was not found");
+            throw new IllegalArgumentException("Supplier invoice " + rInvoiceId + " was not found");
         }
 
         String downloadUrl = invoice.getPublicFileUrl();
@@ -86,12 +85,12 @@ public class Download extends AbstractPennylaneTask implements RunnableTask<Down
         }
 
         if (downloadUrl == null || downloadUrl.isBlank()) {
-            throw new IllegalStateException("Supplier invoice " + id + " has no attached PDF or source document file");
+            throw new IllegalStateException("Supplier invoice " + rInvoiceId + " has no attached PDF or source document file");
         }
 
         String filename = invoice.getFilename();
         if (filename == null || filename.isBlank()) {
-            filename = "supplier-invoice-" + id + ".pdf";
+            filename = "supplier-invoice-" + rInvoiceId + ".pdf";
         }
 
         var tempFile = runContext.workingDir().createTempFile(".pdf").toFile();
@@ -116,7 +115,7 @@ public class Download extends AbstractPennylaneTask implements RunnableTask<Down
         return Output.builder()
             .uri(storedUri)
             .filename(filename)
-            .invoiceId(id)
+            .invoiceId(rInvoiceId)
             .build();
     }
 

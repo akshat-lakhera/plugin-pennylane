@@ -10,6 +10,7 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
 import io.kestra.plugin.pennylane.models.Changelog;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -28,9 +29,11 @@ import java.util.Map;
 @NoArgsConstructor
 @Schema(
     title = "List Pennylane changelog events",
-    description = "Returns incremental change events for a Pennylane resource type. " +
-        "The changelog endpoint retains events for the last 4 weeks. " +
-        "Pass `since` to only retrieve changes after a given timestamp — ideal for watermark-based incremental ingestion."
+    description = "Returns incremental change events for a Pennylane resource. " +
+        "Events are retained for 4 weeks and ordered by processed_at ascending. " +
+        "A start_date older than the retention window returns HTTP 422. " +
+        "Follow-up pages send only cursor and limit, because start_date together with cursor returns HTTP 400. " +
+        "Each item is the resource id, operation (insert, update, or delete), processed_at, updated_at, and created_at."
 )
 @Plugin(
     examples = {
@@ -54,9 +57,6 @@ import java.util.Map;
 )
 public class List extends AbstractPennylaneTask implements RunnableTask<List.Output> {
 
-    /**
-     * Supported resource names for the changelogs endpoint.
-     */
     public enum ChangelogResource {
         supplier_invoices,
         customer_invoices,
@@ -68,32 +68,36 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Resource type",
-        description = "Pennylane resource type to retrieve changelog events for. " +
+        description = "Pennylane resource to retrieve changelog events for. " +
             "Supported values: supplier_invoices, customer_invoices, transactions, " +
             "ledger_entry_lines, customers, suppliers."
     )
+    @NotNull
     @PluginProperty(group = "processing")
     private Property<ChangelogResource> resource;
 
     @Schema(
         title = "Since timestamp",
-        description = "ISO-8601 timestamp. Only change events that occurred after this timestamp are returned. " +
-            "If omitted, the API returns the oldest retained set of changes (up to 4 weeks ago)."
+        description = "ISO-8601 timestamp sent as start_date on the first page only. " +
+            "The changelog keeps about 4 weeks of events; an older start_date returns HTTP 422."
     )
     @PluginProperty(group = "processing")
     private Property<String> since;
 
     @Schema(
         title = "Page size",
-        description = "Number of items per request page (1 to 100). Defaults to 100."
+        description = "Number of changelog events per request. Must be between 1 and 1000. Defaults to 100.",
+        minimum = "1",
+        maximum = "1000"
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Integer> pageSize = Property.ofValue(100);
+    private Property<Integer> pageSize = Property.ofValue(DEFAULT_PAGE_SIZE);
 
     @Schema(
         title = "Maximum records",
-        description = "Maximum total number of change events to retrieve across all pages. Omit to fetch all."
+        description = "Maximum total number of change events to retrieve across all pages. Omit to fetch all. Must be at least 1 when set.",
+        minimum = "1"
     )
     @PluginProperty(group = "processing")
     private Property<Integer> maxRecords;
@@ -108,35 +112,32 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        ChangelogResource resourceType = runContext.render(this.resource)
+        ChangelogResource rResource = runContext.render(this.resource)
             .as(ChangelogResource.class)
             .orElseThrow(() -> new IllegalArgumentException("resource is required for changelogs.List"));
 
-        Map<String, String> queryParams = new LinkedHashMap<>();
+        int rPageSize = renderPageSize(runContext, this.pageSize, MAX_CHANGELOG_PAGE_SIZE);
+        Integer rMaxRecords = renderMaxRecords(runContext, this.maxRecords);
 
-        int limit = runContext.render(this.pageSize).as(Integer.class).orElse(100);
-        queryParams.put("limit", String.valueOf(Math.min(100, Math.max(1, limit))));
+        Map<String, String> queryParams = new LinkedHashMap<>();
+        queryParams.put("limit", String.valueOf(rPageSize));
 
         if (this.since != null) {
-            runContext.render(this.since).as(String.class).ifPresent(s ->
-                queryParams.put("start_date", s)
+            runContext.render(this.since).as(String.class).ifPresent(since ->
+                queryParams.put("start_date", since)
             );
         }
 
-        Integer max = runContext.render(this.maxRecords).as(Integer.class).orElse(null);
-
-        // Changelog path: GET /changelogs/{resource}
-        String endpointPath = "changelogs/" + resourceType.name();
-
-        java.util.List<Changelog> items = paginate(
+        FetchResult<Changelog> result = drain(
             runContext,
-            endpointPath,
+            "changelogs/" + rResource.name(),
             queryParams,
             Changelog.class,
-            max
+            this.fetchType,
+            rMaxRecords,
+            PageMode.CHANGELOG,
+            null
         );
-
-        FetchResult<Changelog> result = fetchOutput(runContext, this.fetchType, items);
 
         return Output.builder()
             .rows(result.rows())

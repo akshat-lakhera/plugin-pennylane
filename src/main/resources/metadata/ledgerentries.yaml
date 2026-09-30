@@ -1,0 +1,8 @@
+group: io.kestra.plugin.pennylane.accounting.ledgerentries
+name: "ledgerentries"
+title: "Accounting - Ledger Entries"
+description: "Tasks for listing Pennylane ledger entries."
+body: "Retrieve ledger entries from Pennylane. API v2 exposes ledger entries with page and per_page pagination."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"
