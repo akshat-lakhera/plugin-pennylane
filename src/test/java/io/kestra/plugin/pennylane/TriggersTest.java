@@ -338,6 +338,62 @@ class TriggersTest {
     }
 
     @Test
+    void testTransactionTriggerOrdersByMostRecentEvent() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/transactions"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {"id": 401, "operation": "insert", "processed_at": "2024-01-02T11:50:00Z"},
+                            {"id": 402, "operation": "insert", "processed_at": "2024-01-02T11:52:00Z"},
+                            {"id": 401, "operation": "update", "processed_at": "2024-01-02T11:55:00Z"}
+                        ]
+                    }
+                    """)));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/transactions"))
+            .withQueryParam("filter", containing("\"field\":\"id\""))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "next_cursor": null,
+                        "items": [
+                            {"id": 401, "amount": "-1.00", "currency": "EUR", "label": "A", "categories": []},
+                            {"id": 402, "amount": "-2.00", "currency": "EUR", "label": "B", "categories": []}
+                        ]
+                    }
+                    """)));
+
+        var trigger = TransactionTrigger.builder()
+            .id("txn-trigger-order-" + UUID.randomUUID())
+            .type(TransactionTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
+
+        assertThat(executionOpt.isPresent(), is(true));
+        var variables = executionOpt.get().getTrigger().getVariables();
+        var latest = (io.kestra.plugin.pennylane.models.Transaction) variables.get("transaction");
+        @SuppressWarnings("unchecked")
+        var all = (List<io.kestra.plugin.pennylane.models.Transaction>) variables.get("transactions");
+        assertThat(latest.getId(), is(401L));
+        assertThat(all.stream().map(io.kestra.plugin.pennylane.models.Transaction::getId).toList(), contains(402L, 401L));
+    }
+
+    @Test
     void testSupplierInvoiceTriggerDoesNotRefireSameWatermark() throws Exception {
         wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
             .willReturn(aResponse()

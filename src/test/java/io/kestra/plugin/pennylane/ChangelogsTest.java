@@ -6,6 +6,8 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
+import jakarta.validation.ConstraintViolationException;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.pennylane.changelogs.List;
 import jakarta.inject.Inject;
@@ -83,7 +85,7 @@ class ChangelogsTest {
                     """)));
 
         var task = List.builder()
-            .id("test-changelogs-list")
+            .id("test-changelogs-list-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -138,7 +140,7 @@ class ChangelogsTest {
                     """)));
 
         var task = List.builder()
-            .id("test-changelogs-page-2")
+            .id("test-changelogs-page-2-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -159,7 +161,7 @@ class ChangelogsTest {
     @Test
     void testChangelogPageSizeOutOfRange() {
         var task = List.builder()
-            .id("test-changelogs-page-size")
+            .id("test-changelogs-page-size-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -168,7 +170,7 @@ class ChangelogsTest {
             .build();
 
         RunContext rc = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> task.run(rc));
+        var ex = assertThrows(ConstraintViolationException.class, () -> task.run(rc));
         assertThat(ex.getMessage(), containsString("pageSize"));
     }
 }

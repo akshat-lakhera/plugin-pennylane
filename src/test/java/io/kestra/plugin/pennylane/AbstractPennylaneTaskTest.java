@@ -7,6 +7,8 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
+import jakarta.validation.ConstraintViolationException;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.pennylane.supplierinvoices.List;
 import jakarta.inject.Inject;
@@ -87,7 +89,7 @@ class AbstractPennylaneTaskTest {
                     """)));
 
         List task = List.builder()
-            .id("test-auth-pagination")
+            .id("test-auth-pagination-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("test-token-123"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -113,7 +115,7 @@ class AbstractPennylaneTaskTest {
                 .withBody("{\"error\": \"Unauthorized\"}")));
 
         List task = List.builder()
-            .id("test-401")
+            .id("test-401-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("invalid-token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -134,7 +136,7 @@ class AbstractPennylaneTaskTest {
                 .withBody("{\"error\": \"Not Found\"}")));
 
         List task = List.builder()
-            .id("test-404")
+            .id("test-404-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("valid-token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -175,7 +177,7 @@ class AbstractPennylaneTaskTest {
                     """)));
 
         List task = List.builder()
-            .id("test-429-retry")
+            .id("test-429-retry-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("test-token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -191,7 +193,7 @@ class AbstractPennylaneTaskTest {
     @Test
     void testPageSizeIsNotClamped() {
         List task = List.builder()
-            .id("test-page-size")
+            .id("test-page-size-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -199,8 +201,8 @@ class AbstractPennylaneTaskTest {
             .build();
 
         RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> task.run(runContext));
-        assertThat(ex.getMessage(), containsString("between 1 and 100"));
+        var ex = assertThrows(ConstraintViolationException.class, () -> task.run(runContext));
+        assertThat(ex.getMessage(), containsString("pageSize"));
     }
 
     @Test
@@ -209,7 +211,7 @@ class AbstractPennylaneTaskTest {
             .willReturn(aResponse().withStatus(404).withBody("{\"error\": \"Not Found\"}")));
 
         List task = List.builder()
-            .id("test-fetch-404")
+            .id("test-fetch-404-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -233,7 +235,7 @@ class AbstractPennylaneTaskTest {
             .willReturn(aResponse().withStatus(500).withBody("{\"error\": \"Internal Server Error\"}")));
 
         List task = List.builder()
-            .id("test-fetch-500")
+            .id("test-fetch-500-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))

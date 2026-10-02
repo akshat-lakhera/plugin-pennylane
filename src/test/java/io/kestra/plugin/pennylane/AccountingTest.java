@@ -6,6 +6,7 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.pennylane.accounting.trialbalance.Get;
 import jakarta.inject.Inject;
@@ -97,7 +98,7 @@ class AccountingTest {
                     """)));
 
         var task = Get.builder()
-            .id("test-trial-balance-get")
+            .id("test-trial-balance-get-" + IdUtils.create())
             .type(Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -161,7 +162,7 @@ class AccountingTest {
                     """)));
 
         var task = io.kestra.plugin.pennylane.accounting.ledgerentries.List.builder()
-            .id("test-ledger-entries-list")
+            .id("test-ledger-entries-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.accounting.ledgerentries.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -199,7 +200,7 @@ class AccountingTest {
                     """)));
 
         var task = io.kestra.plugin.pennylane.accounting.ledgeraccounts.List.builder()
-            .id("test-ledger-accounts-list")
+            .id("test-ledger-accounts-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.accounting.ledgeraccounts.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -238,7 +239,7 @@ class AccountingTest {
                     """)));
 
         var task = io.kestra.plugin.pennylane.accounting.ledgerentrylines.List.builder()
-            .id("test-ledger-entry-lines-list")
+            .id("test-ledger-entry-lines-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.accounting.ledgerentrylines.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))

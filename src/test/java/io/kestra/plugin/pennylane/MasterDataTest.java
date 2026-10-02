@@ -6,6 +6,7 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
@@ -74,7 +75,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.suppliers.List.builder()
-            .id("test-sup-list")
+            .id("test-sup-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.suppliers.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -86,7 +87,7 @@ class MasterDataTest {
         assertThat(listOut.getRows().get(0).getName(), is("AWS EMEA"));
 
         var getTask = io.kestra.plugin.pennylane.masterdata.suppliers.Get.builder()
-            .id("test-sup-get")
+            .id("test-sup-get-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.suppliers.Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -125,7 +126,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.customers.List.builder()
-            .id("test-cust-list")
+            .id("test-cust-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.customers.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -137,7 +138,7 @@ class MasterDataTest {
         assertThat(listOut.getRows().get(0).getName(), is("Acme Global"));
 
         var getTask = io.kestra.plugin.pennylane.masterdata.customers.Get.builder()
-            .id("test-cust-get")
+            .id("test-cust-get-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.customers.Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -176,7 +177,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.bankaccounts.List.builder()
-            .id("test-bank-list")
+            .id("test-bank-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.bankaccounts.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -188,7 +189,7 @@ class MasterDataTest {
         assertThat(listOut.getRows().get(0).getName(), is("Main Checking"));
 
         var getTask = io.kestra.plugin.pennylane.masterdata.bankaccounts.Get.builder()
-            .id("test-bank-get")
+            .id("test-bank-get-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.bankaccounts.Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -219,7 +220,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.categories.List.builder()
-            .id("test-cat-list")
+            .id("test-cat-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.categories.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -249,7 +250,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.categorygroups.List.builder()
-            .id("test-catgroup-list")
+            .id("test-catgroup-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.categorygroups.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -284,7 +285,7 @@ class MasterDataTest {
                     """)));
 
         var listTask = io.kestra.plugin.pennylane.masterdata.billingsubscriptions.List.builder()
-            .id("test-sub-list")
+            .id("test-sub-list-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.masterdata.billingsubscriptions.List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))

@@ -69,7 +69,7 @@ public class SupplierInvoiceTrigger extends AbstractPennylaneTrigger {
         String namespace = conditionContext.getFlow().getNamespace();
         String watermarkKey = PennylaneWatermark.key(conditionContext.getFlow().getId(), this.getId());
         PennylaneWatermark.State previous = PennylaneWatermark.load(runContext, namespace, watermarkKey);
-        String lookback = PennylaneWatermark.initialStart(context.getDate(), this.interval);
+        String lookback = PennylaneWatermark.initialStart(context.getDate(), getInterval());
 
         AbstractPennylaneTask.ChangelogSync sync = AbstractPennylaneTask.syncChangelogs(
             runContext,
@@ -81,10 +81,11 @@ public class SupplierInvoiceTrigger extends AbstractPennylaneTrigger {
             lookback
         );
 
-        // Deduplicate unseen events by id, preserving latest event order
+        // Re-insert on repeat so iteration order follows each id's most recent event
         Map<Long, Changelog> latestUnseen = new LinkedHashMap<>();
         for (Changelog change : sync.unseen()) {
             if (!change.deleted() && change.getId() != null) {
+                latestUnseen.remove(change.getId());
                 latestUnseen.put(change.getId(), change);
             }
         }

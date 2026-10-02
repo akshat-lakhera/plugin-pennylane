@@ -12,6 +12,8 @@ import io.kestra.plugin.pennylane.AbstractPennylaneTask;
 import io.kestra.plugin.pennylane.models.PennylaneFilter;
 import io.kestra.plugin.pennylane.models.Supplier;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -83,7 +85,7 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
     )
     @Builder.Default
     @PluginProperty(group = "processing")
-    private Property<Integer> pageSize = Property.ofValue(100);
+    private Property<@Min(1) @Max(100) Integer> pageSize = Property.ofValue(100);
 
     @Schema(
         title = "Maximum records",
@@ -91,7 +93,7 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
         minimum = "1"
     )
     @PluginProperty(group = "processing")
-    private Property<Integer> maxRecords;
+    private Property<@Min(1) Integer> maxRecords;
 
     @Schema(
         title = "Fetch type",

@@ -52,14 +52,17 @@ public abstract class AbstractPennylaneTrigger extends AbstractTrigger implement
 
     @Schema(
         title = "Polling interval",
-        description = "How frequently to poll the Pennylane changelog. ISO-8601 duration. Defaults to PT5M."
+        description = "How frequently to poll the Pennylane changelog. ISO-8601 duration. Defaults to PT5M (PT10M for CustomerInvoicePaidTrigger)."
     )
-    @Builder.Default
     @PluginProperty(group = "advanced")
-    protected Duration interval = Duration.ofMinutes(5);
+    protected Duration interval;
+
+    protected Duration defaultInterval() {
+        return Duration.ofMinutes(5);
+    }
 
     @Override
     public Duration getInterval() {
-        return this.interval;
+        return this.interval != null ? this.interval : defaultInterval();
     }
 }

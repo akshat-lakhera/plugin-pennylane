@@ -7,6 +7,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.common.FetchType;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.pennylane.models.SupplierInvoice;
@@ -76,7 +77,7 @@ class SupplierInvoicesTest {
 
         // 1. FETCH
         List fetchTask = List.builder()
-            .id("test-fetch")
+            .id("test-fetch-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -91,7 +92,7 @@ class SupplierInvoicesTest {
 
         // 2. FETCH_ONE
         List fetchOneTask = List.builder()
-            .id("test-fetch-one")
+            .id("test-fetch-one-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -106,7 +107,7 @@ class SupplierInvoicesTest {
 
         // 3. STORE
         List storeTask = List.builder()
-            .id("test-store")
+            .id("test-store-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -128,7 +129,7 @@ class SupplierInvoicesTest {
 
         // 4. NONE
         List noneTask = List.builder()
-            .id("test-none")
+            .id("test-none-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -161,7 +162,7 @@ class SupplierInvoicesTest {
                     """)));
 
         Get task = Get.builder()
-            .id("test-get")
+            .id("test-get-" + IdUtils.create())
             .type(Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -201,7 +202,7 @@ class SupplierInvoicesTest {
                 .withBody("%PDF-1.4 test document content")));
 
         io.kestra.plugin.pennylane.supplierinvoices.Download task = io.kestra.plugin.pennylane.supplierinvoices.Download.builder()
-            .id("test-download")
+            .id("test-download-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.supplierinvoices.Download.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -243,7 +244,7 @@ class SupplierInvoicesTest {
                     """)));
 
         io.kestra.plugin.pennylane.supplierinvoices.MatchedTransactions task = io.kestra.plugin.pennylane.supplierinvoices.MatchedTransactions.builder()
-            .id("test-matched-txns")
+            .id("test-matched-txns-" + IdUtils.create())
             .type(io.kestra.plugin.pennylane.supplierinvoices.MatchedTransactions.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))

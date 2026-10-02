@@ -2,6 +2,7 @@ package io.kestra.plugin.pennylane.models;
 
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -103,6 +104,8 @@ public class Transaction {
         return null;
     }
 
+    // Filter helper, not an API field: keep it out of serialized task outputs and trigger variables.
+    @JsonIgnore
     public boolean isCategorizedForFilter() {
         if (categorized != null) {
             return categorized;

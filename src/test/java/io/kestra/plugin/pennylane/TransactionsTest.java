@@ -6,6 +6,7 @@ import io.kestra.core.junit.annotations.KestraTest;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.core.runners.RunContextFactory;
+import io.kestra.core.utils.IdUtils;
 import io.kestra.core.utils.TestsUtils;
 import io.kestra.plugin.pennylane.transactions.Get;
 import io.kestra.plugin.pennylane.transactions.List;
@@ -69,7 +70,7 @@ class TransactionsTest {
                     """)));
 
         List task = List.builder()
-            .id("test-tx-list")
+            .id("test-tx-list-" + IdUtils.create())
             .type(List.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -104,7 +105,7 @@ class TransactionsTest {
                     """)));
 
         Get task = Get.builder()
-            .id("test-tx-get")
+            .id("test-tx-get-" + IdUtils.create())
             .type(Get.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))

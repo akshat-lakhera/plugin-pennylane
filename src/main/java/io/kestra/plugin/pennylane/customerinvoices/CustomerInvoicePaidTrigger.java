@@ -13,7 +13,6 @@ import io.kestra.plugin.pennylane.PennylaneWatermark;
 import io.kestra.plugin.pennylane.models.Changelog;
 import io.kestra.plugin.pennylane.models.CustomerInvoice;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -63,12 +62,10 @@ import java.util.Optional;
 )
 public class CustomerInvoicePaidTrigger extends AbstractPennylaneTrigger {
 
-    @Schema(
-        title = "Polling interval",
-        description = "How frequently to poll the Pennylane changelog for paid customer invoices. ISO-8601 duration. Defaults to PT10M."
-    )
-    @Builder.Default
-    protected Duration interval = Duration.ofMinutes(10);
+    @Override
+    protected Duration defaultInterval() {
+        return Duration.ofMinutes(10);
+    }
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
@@ -78,7 +75,7 @@ public class CustomerInvoicePaidTrigger extends AbstractPennylaneTrigger {
         String namespace = conditionContext.getFlow().getNamespace();
         String watermarkKey = PennylaneWatermark.key(conditionContext.getFlow().getId(), this.getId());
         PennylaneWatermark.State previous = PennylaneWatermark.load(runContext, namespace, watermarkKey);
-        String lookback = PennylaneWatermark.initialStart(context.getDate(), this.interval);
+        String lookback = PennylaneWatermark.initialStart(context.getDate(), getInterval());
 
         AbstractPennylaneTask.ChangelogSync sync = AbstractPennylaneTask.syncChangelogs(
             runContext,
@@ -90,10 +87,11 @@ public class CustomerInvoicePaidTrigger extends AbstractPennylaneTrigger {
             lookback
         );
 
-        // Deduplicate unseen events by id, preserving latest event order
+        // Re-insert on repeat so iteration order follows each id's most recent event
         Map<Long, Changelog> latestUnseen = new LinkedHashMap<>();
         for (Changelog change : sync.unseen()) {
             if (!change.deleted() && change.getId() != null) {
+                latestUnseen.remove(change.getId());
                 latestUnseen.put(change.getId(), change);
             }
         }
