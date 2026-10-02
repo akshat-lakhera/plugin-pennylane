@@ -89,7 +89,7 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Maximum records",
-        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records. Must be at least 1 when set.",
+        description = "Maximum total number of records to retrieve across all pages. Omit to fetch all matching records. Must be at least 1 when set. No limit by default: pagination follows the API until the last page. Set `maxRecords` to cap the number of records, especially with `fetchType: FETCH`, which keeps all rows in memory; prefer `STORE` for large exports.",
         minimum = "1"
     )
     @PluginProperty(group = "processing")
@@ -97,7 +97,7 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
 
     @Schema(
         title = "Fetch type",
-        description = "Defines how results are emitted: FETCH, FETCH_ONE, STORE, or NONE. Defaults to FETCH."
+        description = "Defines how results are emitted: FETCH, FETCH_ONE, STORE, or NONE. FETCH_ONE stops at the first matching record and returns it as `row` (`count` is 1, or 0 when nothing matches). Defaults to FETCH."
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -168,7 +168,10 @@ public class List extends AbstractPennylaneTask implements RunnableTask<List.Out
         @Schema(title = "URI of the stored .ion internal storage file (populated when fetchType is STORE)")
         private final URI uri;
 
-        @Schema(title = "Total number of billing subscriptions retrieved")
+        @Schema(
+            title = "Total number of billing subscriptions retrieved",
+            description = "For FETCH_ONE, 1 when a row is returned and 0 when nothing matched."
+        )
         private final Integer count;
     }
 }

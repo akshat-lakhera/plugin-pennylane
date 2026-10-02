@@ -103,7 +103,7 @@ class SupplierInvoicesTest {
         assertThat(out2.getRow(), notNullValue());
         assertThat(out2.getRow().getId(), is(1L));
         assertThat(out2.getRows(), nullValue());
-        assertThat(out2.getCount(), is(2));
+        assertThat(out2.getCount(), is(1));
 
         // 3. STORE
         List storeTask = List.builder()

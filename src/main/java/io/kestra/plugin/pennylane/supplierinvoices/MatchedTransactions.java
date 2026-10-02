@@ -62,7 +62,7 @@ public class MatchedTransactions extends AbstractPennylaneTask implements Runnab
 
     @Schema(
         title = "Fetch type",
-        description = "Defines how results are emitted: FETCH, FETCH_ONE, STORE, or NONE. Defaults to FETCH."
+        description = "Defines how results are emitted: FETCH, FETCH_ONE, STORE, or NONE. FETCH_ONE stops at the first matching record and returns it as `row` (`count` is 1, or 0 when nothing matches). Defaults to FETCH."
     )
     @Builder.Default
     @PluginProperty(group = "processing")
@@ -108,7 +108,10 @@ public class MatchedTransactions extends AbstractPennylaneTask implements Runnab
         @Schema(title = "URI of the stored .ion internal storage file (populated when fetchType is STORE)")
         private final URI uri;
 
-        @Schema(title = "Total number of matched bank transactions retrieved")
+        @Schema(
+            title = "Total number of matched bank transactions retrieved",
+            description = "For FETCH_ONE, 1 when a row is returned and 0 when nothing matched."
+        )
         private final Integer count;
     }
 }

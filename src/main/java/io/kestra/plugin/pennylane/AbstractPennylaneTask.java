@@ -42,9 +42,11 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
 
 /**
@@ -63,7 +65,8 @@ public abstract class AbstractPennylaneTask extends Task {
     public static final int MAX_CHANGELOG_PAGE_SIZE = 1000;
     public static final int MAX_TRIAL_BALANCE_PAGE_SIZE = 1000;
     public static final int CHANGELOG_RETENTION_DAYS = 28;
-    public static final int DEFAULT_MAX_PAGES = 10000;
+    // Consecutive pages claiming has_more=true while returning no raw items before we assume the API is stuck.
+    private static final int MAX_CONSECUTIVE_EMPTY_PAGES = 3;
     private static final int MAX_RETRIES = 5;
     private static final long INITIAL_BACKOFF_MS = 1000L;
     private static final long MAX_BACKOFF_MS = 30000L;
@@ -368,6 +371,7 @@ public abstract class AbstractPennylaneTask extends Task {
         FetchType resolved = fetchType == null
             ? FetchType.FETCH
             : runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        Integer effectiveMax = effectiveMaxRecords(resolved, maxRecords);
         String rApiToken = renderApiToken(runContext);
         String rBaseUrl = renderBaseUrl(runContext);
         return collect(runContext, resolved, consumer -> forEachIncludedPage(
@@ -380,7 +384,7 @@ public abstract class AbstractPennylaneTask extends Task {
             itemType,
             pageMode,
             include,
-            maxRecords,
+            effectiveMax,
             consumer
         ));
     }
@@ -397,6 +401,7 @@ public abstract class AbstractPennylaneTask extends Task {
         FetchType resolved = fetchType == null
             ? FetchType.FETCH
             : runContext.render(fetchType).as(FetchType.class).orElse(FetchType.FETCH);
+        Integer effectiveMax = effectiveMaxRecords(resolved, maxRecords);
         String rApiToken = renderApiToken(runContext);
         String rBaseUrl = renderBaseUrl(runContext);
         return collect(runContext, resolved, consumer -> forEachOffsetPage(
@@ -408,9 +413,17 @@ public abstract class AbstractPennylaneTask extends Task {
             queryParams,
             itemType,
             perPage,
-            maxRecords,
+            effectiveMax,
             consumer
         ));
+    }
+
+    // FETCH_ONE stops at the first accepted record, so it never needs more than one.
+    private static Integer effectiveMaxRecords(FetchType type, Integer maxRecords) {
+        if (type != FetchType.FETCH_ONE) {
+            return maxRecords;
+        }
+        return maxRecords == null ? 1 : Math.min(maxRecords, 1);
     }
 
     public static <T> List<T> listAll(
@@ -588,18 +601,12 @@ public abstract class AbstractPennylaneTask extends Task {
     ) throws Exception {
         Map<String, String> baseParams = queryParams != null ? queryParams : Map.of();
         String cursor = null;
-        int pages = 0;
+        Set<String> seenCursors = new HashSet<>();
+        int consecutiveEmptyPages = 0;
         int accepted = 0;
         JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylanePage.class, itemType);
 
-        int pageLimit = maxRecords != null ? Math.max(DEFAULT_MAX_PAGES, (maxRecords / 10) + 10) : DEFAULT_MAX_PAGES;
-
         while (true) {
-            pages++;
-            if (pages > pageLimit) {
-                throw new IllegalStateException("Pennylane pagination exceeded " + pageLimit + " pages for " + endpointPath);
-            }
-
             Map<String, String> requestParams = paramsForPage(baseParams, cursor, pageMode);
             String fullUrl = buildUriWithParams(baseUrl, endpointPath, requestParams);
             @SuppressWarnings("unchecked")
@@ -624,10 +631,22 @@ public abstract class AbstractPennylaneTask extends Task {
                 || page.getNextCursor() == null || page.getNextCursor().isBlank()) {
                 return;
             }
-            if (page.getNextCursor().equals(cursor)) {
-                throw new IllegalStateException("Pennylane pagination returned the same cursor twice for " + endpointPath);
+            // Raw items, not post-filter ones: a filter may legitimately reject a whole page.
+            consecutiveEmptyPages = rawItems.isEmpty() ? consecutiveEmptyPages + 1 : 0;
+            if (consecutiveEmptyPages >= MAX_CONSECUTIVE_EMPTY_PAGES) {
+                throw new IllegalStateException(
+                    "Pennylane pagination returned " + consecutiveEmptyPages + " consecutive empty pages with has_more=true for "
+                        + endpointPath + "; stopping to avoid an infinite loop"
+                );
             }
-            cursor = page.getNextCursor();
+            String nextCursor = page.getNextCursor();
+            if (!seenCursors.add(nextCursor)) {
+                throw new IllegalStateException(
+                    "Pennylane pagination returned a cursor already seen (" + nextCursor + ") for "
+                        + endpointPath + "; stopping to avoid an infinite loop"
+                );
+            }
+            cursor = nextCursor;
         }
     }
 
@@ -645,10 +664,9 @@ public abstract class AbstractPennylaneTask extends Task {
     ) throws Exception {
         int pageNumber = 1;
         int accepted = 0;
-        int pageLimit = maxRecords != null ? Math.max(DEFAULT_MAX_PAGES, (maxRecords / 10) + 10) : DEFAULT_MAX_PAGES;
         JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylaneOffsetPage.class, itemType);
 
-        while (pageNumber <= pageLimit) {
+        while (true) {
             Map<String, String> requestParams = new LinkedHashMap<>();
             if (queryParams != null) {
                 requestParams.putAll(queryParams);
@@ -676,6 +694,10 @@ public abstract class AbstractPennylaneTask extends Task {
                 return;
             }
 
+            if (rawItems.isEmpty()) {
+                return;
+            }
+
             Integer totalPages = page != null ? page.getTotalPages() : null;
             if (totalPages != null) {
                 if (pageNumber >= totalPages) {
@@ -686,7 +708,6 @@ public abstract class AbstractPennylaneTask extends Task {
             }
             pageNumber++;
         }
-        throw new IllegalStateException("Pennylane offset pagination exceeded " + pageLimit + " pages for " + endpointPath);
     }
 
     private static Map<String, String> paramsForPage(Map<String, String> baseParams, String cursor, PageMode pageMode) {

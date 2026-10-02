@@ -46,11 +46,11 @@ The plugin calls the [Pennylane API v2](https://pennylane.readme.io/) at `https:
 List tasks accept `fetchType`:
 
 - `FETCH` returns `rows`
-- `FETCH_ONE` returns the first `row` and still counts every included record
+- `FETCH_ONE` stops at the first matching record and returns it as `row` (`count` is 1, or 0 when nothing matches)
 - `STORE` appends each page to an internal-storage `.ion` file as the page arrives
 - `NONE` returns only `count`
 
-Cursor lists send `limit` (1–100, default 100). `changelogs.List` and `accounting.trialbalance.Get` allow up to 1000. `pageSize` outside that range fails the task instead of being clamped. `maxRecords` stops early when set and must be at least 1.
+Cursor lists send `limit` (1–100, default 100). `changelogs.List` and `accounting.trialbalance.Get` allow up to 1000. `pageSize` outside that range fails the task instead of being clamped. `maxRecords` stops early when set and must be at least 1. There is no page limit by default: pagination follows the API until the last page, so set `maxRecords` (and prefer `fetchType: STORE`) for large exports. Pagination fails if the API returns a cursor already seen or three consecutive empty pages with `has_more=true`.
 
 | Task | Endpoint |
 | --- | --- |

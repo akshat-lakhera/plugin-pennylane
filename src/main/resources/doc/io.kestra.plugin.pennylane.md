@@ -9,10 +9,10 @@ Authentication against the Pennylane API is handled via an API token generated i
 
 ## Core Features
 
-- **Cursor-based Pagination**: Automatically pages through multi-page result sets until all records are retrieved, with optional caps via `maxRecords`.
+- **Cursor-based Pagination**: Automatically pages through multi-page result sets until the API reports the last page, with no page limit by default and an optional cap via `maxRecords`.
 - **Flexible Ingestion Modes (`fetchType`)**:
   - `FETCH`: In-memory list available as `{{ outputs.taskId.rows }}`.
-  - `FETCH_ONE`: Single item available as `{{ outputs.taskId.row }}`.
+  - `FETCH_ONE`: Stops at the first matching record; it is available as `{{ outputs.taskId.row }}` (`count` is 1, or 0 when nothing matches).
   - `STORE`: Streams items directly into Kestra internal storage (`.ion` format) for large-volume batch workflows.
   - `NONE`: Counts records without retaining them in memory.
 - **Resilient Rate Limiting**: Built-in exponential backoff and `Retry-After` header parsing gracefully handles HTTP 429 rate limits.

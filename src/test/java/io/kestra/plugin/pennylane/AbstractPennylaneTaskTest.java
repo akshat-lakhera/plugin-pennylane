@@ -10,6 +10,10 @@ import io.kestra.core.runners.RunContextFactory;
 import io.kestra.core.utils.IdUtils;
 import jakarta.validation.ConstraintViolationException;
 import io.kestra.core.utils.TestsUtils;
+import io.kestra.core.models.tasks.common.FetchType;
+import io.kestra.plugin.pennylane.AbstractPennylaneTask.FetchResult;
+import io.kestra.plugin.pennylane.AbstractPennylaneTask.PageMode;
+import io.kestra.plugin.pennylane.models.SupplierInvoice;
 import io.kestra.plugin.pennylane.supplierinvoices.List;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.AfterAll;
@@ -18,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -252,5 +257,207 @@ class AbstractPennylaneTaskTest {
                 io.kestra.plugin.pennylane.models.SupplierInvoice.class
             )
         );
+    }
+
+    private void stubCursorPage(String cursor, String nextCursor, boolean hasMore, String itemsJson) {
+        var mapping = get(urlPathEqualTo("/api/external/v2/supplier_invoices"));
+        mapping = cursor == null ? mapping.withQueryParam("cursor", absent()) : mapping.withQueryParam("cursor", equalTo(cursor));
+        wireMockServer.stubFor(mapping.willReturn(aResponse()
+            .withStatus(200)
+            .withHeader("Content-Type", "application/json")
+            .withBody("{\"has_more\": " + hasMore + ", \"next_cursor\": "
+                + (nextCursor == null ? "null" : "\"" + nextCursor + "\"") + ", \"items\": " + itemsJson + "}")));
+    }
+
+    private List supplierInvoiceList(String idPrefix) {
+        return List.builder()
+            .id(idPrefix + IdUtils.create())
+            .type(List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+    }
+
+    @Test
+    void cursorCycleFailsWithAlreadySeenCursor() {
+        stubCursorPage(null, "B", true, "[{\"id\": 1}]");
+        stubCursorPage("B", "A", true, "[{\"id\": 2}]");
+        stubCursorPage("A", "B", true, "[{\"id\": 3}]");
+
+        List task = supplierInvoiceList("test-cursor-cycle-");
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+
+        var ex = assertThrows(IllegalStateException.class, () -> task.run(runContext));
+        assertThat(ex.getMessage(), containsString("cursor already seen (B)"));
+        assertThat(ex.getMessage(), containsString("supplier_invoices"));
+    }
+
+    @Test
+    void longCursorChainCompletes() throws Exception {
+        int pages = 50;
+        for (int i = 0; i < pages; i++) {
+            String cursor = i == 0 ? null : "cur_" + i;
+            boolean last = i == pages - 1;
+            stubCursorPage(cursor, last ? null : "cur_" + (i + 1), !last, "[{\"id\": " + (i + 1) + "}]");
+        }
+
+        List task = supplierInvoiceList("test-long-chain-");
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        List.Output output = task.run(runContext);
+
+        assertThat(output.getCount(), is(pages));
+        assertThat(output.getRows(), hasSize(pages));
+    }
+
+    @Test
+    void consecutiveEmptyPagesWithHasMoreFail() {
+        stubCursorPage(null, "c1", true, "[]");
+        stubCursorPage("c1", "c2", true, "[]");
+        stubCursorPage("c2", "c3", true, "[]");
+        stubCursorPage("c3", "c4", true, "[]");
+
+        List task = supplierInvoiceList("test-empty-pages-");
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+
+        var ex = assertThrows(IllegalStateException.class, () -> task.run(runContext));
+        assertThat(ex.getMessage(), containsString("3 consecutive empty pages"));
+    }
+
+    @Test
+    void offsetPagerStopsOnEmptyPageWithoutTotalPages() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("1"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"items\": [{\"id\": 1}, {\"id\": 2}]}")));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("2"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"items\": []}")));
+
+        var task = io.kestra.plugin.pennylane.accounting.ledgerentries.List.builder()
+            .id("test-offset-empty-" + IdUtils.create())
+            .type(io.kestra.plugin.pennylane.accounting.ledgerentries.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .pageSize(Property.ofValue(2))
+            .build();
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        var output = task.run(runContext);
+
+        assertThat(output.getCount(), is(2));
+    }
+
+    @Test
+    void offsetPagerStopsOnEmptyPageEvenWhenTotalPagesIsHigher() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("1"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"total_pages\": 5, \"items\": [{\"id\": 1}, {\"id\": 2}]}")));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .withQueryParam("page", equalTo("2"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"total_pages\": 5, \"items\": []}")));
+
+        var task = io.kestra.plugin.pennylane.accounting.ledgerentries.List.builder()
+            .id("test-offset-empty-total-" + IdUtils.create())
+            .type(io.kestra.plugin.pennylane.accounting.ledgerentries.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .pageSize(Property.ofValue(2))
+            .build();
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+
+        assertThat(task.run(runContext).getCount(), is(2));
+    }
+
+    private List fetchOneList(String idPrefix) {
+        return List.builder()
+            .id(idPrefix + IdUtils.create())
+            .type(List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
+            .build();
+    }
+
+    @Test
+    void fetchOneStopsAfterFirstPageOfCursorList() throws Exception {
+        long first = ThreadLocalRandom.current().nextLong(1, 1_000_000);
+        stubCursorPage(null, "next_" + IdUtils.create(), true, "[{\"id\": " + first + "}, {\"id\": " + (first + 1) + "}]");
+        // Any follow-up page request would hit this catch-all stub and be counted below.
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices"))
+            .withQueryParam("cursor", matching(".+"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"has_more\": false, \"items\": [{\"id\": 999999999}]}")));
+
+        List task = fetchOneList("test-fetch-one-first-page-");
+        List.Output output = task.run(TestsUtils.mockRunContext(runContextFactory, task, Map.of()));
+
+        assertThat(output.getCount(), is(1));
+        assertThat(output.getRow().getId(), is(first));
+        assertThat(output.getRows(), nullValue());
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/external/v2/supplier_invoices")));
+    }
+
+    @Test
+    void fetchOneWithNoItemsReturnsZeroAndNullRow() throws Exception {
+        stubCursorPage(null, null, false, "[]");
+
+        List task = fetchOneList("test-fetch-one-empty-");
+        List.Output output = task.run(TestsUtils.mockRunContext(runContextFactory, task, Map.of()));
+
+        assertThat(output.getCount(), is(0));
+        assertThat(output.getRow(), nullValue());
+    }
+
+    @Test
+    void fetchOneSkipsRecordsRejectedByPostFilterAcrossPages() throws Exception {
+        long rejectedA = ThreadLocalRandom.current().nextLong(1, 1_000_000);
+        long rejectedB = rejectedA + 1;
+        long match = rejectedA + 2;
+        long afterMatch = rejectedA + 3;
+        stubCursorPage(null, "p2", true, "[{\"id\": " + rejectedA + "}]");
+        stubCursorPage("p2", "p3", true, "[{\"id\": " + rejectedB + "}]");
+        stubCursorPage("p3", "p4", true, "[{\"id\": " + match + "}, {\"id\": " + afterMatch + "}]");
+        stubCursorPage("p4", null, false, "[{\"id\": " + (afterMatch + 1) + "}]");
+
+        List task = fetchOneList("test-fetch-one-filter-");
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        FetchResult<SupplierInvoice> result = task.drain(
+            runContext,
+            "supplier_invoices",
+            Map.of(),
+            SupplierInvoice.class,
+            Property.ofValue(FetchType.FETCH_ONE),
+            null,
+            PageMode.STANDARD,
+            invoice -> invoice.getId() >= match
+        );
+
+        assertThat(result.count(), is(1));
+        assertThat(result.row().getId(), is(match));
+        wireMockServer.verify(3, getRequestedFor(urlPathEqualTo("/api/external/v2/supplier_invoices")));
+    }
+
+    @Test
+    void fetchOneOnOffsetPagerMakesSingleRequest() throws Exception {
+        long first = ThreadLocalRandom.current().nextLong(1, 1_000_000);
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/ledger_entries"))
+            .willReturn(aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                .withBody("{\"total_pages\": 5, \"items\": [{\"id\": " + first + "}, {\"id\": " + (first + 1) + "}]}")));
+
+        var task = io.kestra.plugin.pennylane.accounting.ledgerentries.List.builder()
+            .id("test-fetch-one-offset-" + IdUtils.create())
+            .type(io.kestra.plugin.pennylane.accounting.ledgerentries.List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .pageSize(Property.ofValue(2))
+            .fetchType(Property.ofValue(FetchType.FETCH_ONE))
+            .build();
+        var output = task.run(TestsUtils.mockRunContext(runContextFactory, task, Map.of()));
+
+        assertThat(output.getCount(), is(1));
+        assertThat(output.getRow().getId(), is(first));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/external/v2/ledger_entries")));
     }
 }
