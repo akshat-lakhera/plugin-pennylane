@@ -1,31 +1,24 @@
 package io.kestra.plugin.pennylane.supplierinvoices;
 
-import io.kestra.core.http.client.configurations.HttpConfiguration;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
-import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.conditions.ConditionContext;
 import io.kestra.core.models.executions.Execution;
-import io.kestra.core.models.property.Property;
-import io.kestra.core.models.triggers.AbstractTrigger;
-import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
+import io.kestra.plugin.pennylane.AbstractPennylaneTrigger;
 import io.kestra.plugin.pennylane.PennylaneWatermark;
 import io.kestra.plugin.pennylane.models.Changelog;
 import io.kestra.plugin.pennylane.models.SupplierInvoice;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
-import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,44 +59,7 @@ import java.util.Optional;
         )
     }
 )
-public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTriggerInterface {
-
-    @Schema(
-        title = "Pennylane API token",
-        description = "Company or firm API token used to authenticate against the Pennylane API."
-    )
-    @NotNull
-    @PluginProperty(secret = true, group = "connection")
-    @ToString.Exclude
-    private Property<String> apiToken;
-
-    @Schema(
-        title = "Pennylane API base URL",
-        description = "Base endpoint URL for Pennylane API calls."
-    )
-    @Builder.Default
-    @PluginProperty(group = "connection")
-    private Property<String> baseUrl = Property.ofValue(AbstractPennylaneTask.DEFAULT_BASE_URL);
-
-    @Schema(
-        title = "HTTP client options",
-        description = "Optional HTTP client configuration (timeouts, proxy, SSL) applied to every request."
-    )
-    @PluginProperty(group = "advanced")
-    private HttpConfiguration options;
-
-    @Schema(
-        title = "Polling interval",
-        description = "How frequently to poll the Pennylane changelog for new supplier invoices. ISO-8601 duration. Defaults to PT5M."
-    )
-    @Builder.Default
-    @PluginProperty(group = "advanced")
-    private Duration interval = Duration.ofMinutes(5);
-
-    @Override
-    public Duration getInterval() {
-        return this.interval;
-    }
+public class SupplierInvoiceTrigger extends AbstractPennylaneTrigger {
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
@@ -125,17 +81,22 @@ public class SupplierInvoiceTrigger extends AbstractTrigger implements PollingTr
             lookback
         );
 
-        List<SupplierInvoice> invoices = new ArrayList<>();
+        // Deduplicate unseen events by id, preserving latest event order
+        Map<Long, Changelog> latestUnseen = new LinkedHashMap<>();
         for (Changelog change : sync.unseen()) {
-            if (change.deleted() || change.getId() == null) {
-                continue;
+            if (!change.deleted() && change.getId() != null) {
+                latestUnseen.put(change.getId(), change);
             }
+        }
+
+        List<SupplierInvoice> invoices = new ArrayList<>();
+        for (Long id : latestUnseen.keySet()) {
             SupplierInvoice invoice = AbstractPennylaneTask.fetchById(
                 runContext,
                 this.options,
                 rApiToken,
                 rBaseUrl,
-                "supplier_invoices/" + change.getId(),
+                "supplier_invoices/" + id,
                 SupplierInvoice.class
             );
             if (invoice != null) {

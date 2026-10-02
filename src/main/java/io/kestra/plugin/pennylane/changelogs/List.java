@@ -49,7 +49,7 @@ import java.util.Map;
                     type: io.kestra.plugin.pennylane.changelogs.List
                     apiToken: "{{ secret('PENNYLANE_API_TOKEN') }}"
                     resource: supplier_invoices
-                    since: "2024-01-01T00:00:00Z"
+                    since: "{{ now() | dateAdd(-1, 'DAYS') }}"
                     fetchType: FETCH
                 """
         )

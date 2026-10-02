@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -127,7 +128,7 @@ class TriggersTest {
                     """)));
 
         var trigger = SupplierInvoiceTrigger.builder()
-            .id("sup-trigger")
+            .id("sup-trigger-" + UUID.randomUUID())
             .type(SupplierInvoiceTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -182,7 +183,7 @@ class TriggersTest {
                     """)));
 
         var trigger = CustomerInvoicePaidTrigger.builder()
-            .id("cust-paid-trigger")
+            .id("cust-paid-trigger-" + UUID.randomUUID())
             .type(CustomerInvoicePaidTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -241,7 +242,7 @@ class TriggersTest {
                     """)));
 
         var trigger = SupplierInvoiceTrigger.builder()
-            .id("sup-trigger-deleted")
+            .id("sup-trigger-deleted-" + UUID.randomUUID())
             .type(SupplierInvoiceTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -307,7 +308,7 @@ class TriggersTest {
                     """)));
 
         var trigger = TransactionTrigger.builder()
-            .id("txn-trigger")
+            .id("txn-trigger-" + UUID.randomUUID())
             .type(TransactionTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -357,7 +358,7 @@ class TriggersTest {
                 .withBody("{\"id\": 101, \"invoice_number\": \"SUP-101\"}")));
 
         var trigger = SupplierInvoiceTrigger.builder()
-            .id("sup-trigger-once")
+            .id("sup-trigger-once-" + UUID.randomUUID())
             .type(SupplierInvoiceTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -391,7 +392,7 @@ class TriggersTest {
             .willReturn(aResponse().withStatus(404).withBody("{\"error\":\"missing\"}")));
 
         var trigger = SupplierInvoiceTrigger.builder()
-            .id("sup-trigger-skip")
+            .id("sup-trigger-skip-" + UUID.randomUUID())
             .type(SupplierInvoiceTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -434,7 +435,7 @@ class TriggersTest {
                     """)));
 
         var trigger = CustomerInvoicePaidTrigger.builder()
-            .id("paid-watermark")
+            .id("paid-watermark-" + UUID.randomUUID())
             .type(CustomerInvoicePaidTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -473,7 +474,7 @@ class TriggersTest {
                 .withBody("{\"id\": 2, \"paid\": true}")));
 
         var trigger = CustomerInvoicePaidTrigger.builder()
-            .id("paid-both")
+            .id("paid-both-" + UUID.randomUUID())
             .type(CustomerInvoicePaidTrigger.class.getName())
             .apiToken(Property.ofValue("token"))
             .baseUrl(Property.ofValue(getBaseUrl()))
@@ -489,5 +490,100 @@ class TriggersTest {
         var invoice = (io.kestra.plugin.pennylane.models.CustomerInvoice) execution.get().getTrigger().getVariables().get("invoice");
         assertThat(invoice.getId(), is(2L));
         assertThat(execution.get().getTrigger().getVariables().get("changeCount"), is(2));
+    }
+
+    @Test
+    void testSupplierInvoiceTriggerDeduplicatesEventsPerId() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 101, "operation": "insert", "processed_at": "2024-01-02T11:50:00Z"},
+                            {"id": 101, "operation": "update", "processed_at": "2024-01-02T11:55:00Z"}
+                        ]
+                    }
+                    """)));
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/101"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"id\": 101, \"invoice_number\": \"SUP-101\"}")));
+
+        var trigger = SupplierInvoiceTrigger.builder()
+            .id("sup-trigger-dedup-" + UUID.randomUUID())
+            .type(SupplierInvoiceTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(executionOpt.isPresent(), is(true));
+        // Verify invoice 101 was fetched only ONCE despite 2 changelog events
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/external/v2/supplier_invoices/101")));
+    }
+
+    @Test
+    void testTriggerRecoversFrom422ExpiredStartDate() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .withQueryParam("start_date", equalTo("2020-01-01T00:00:00Z"))
+            .willReturn(aResponse()
+                .withStatus(422)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"error\": \"start_date is older than the retention window\"}")));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/changelogs/supplier_invoices"))
+            .withQueryParam("start_date", not(equalTo("2020-01-01T00:00:00Z")))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                    {
+                        "has_more": false,
+                        "items": [
+                            {"id": 888, "operation": "insert", "processed_at": "2024-01-02T11:59:00Z"}
+                        ]
+                    }
+                    """)));
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/888"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"id\": 888, \"invoice_number\": \"SUP-888\"}")));
+
+        var trigger = SupplierInvoiceTrigger.builder()
+            .id("sup-trigger-422-" + UUID.randomUUID())
+            .type(SupplierInvoiceTrigger.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .interval(Duration.ofMinutes(15))
+            .build();
+
+        Flow flow = createFlow();
+        TriggerContext triggerContext = createTriggerContext(flow, trigger.getId());
+        ConditionContext conditionContext = createConditionContext(flow, trigger, triggerContext);
+
+        // Preload an ancient watermark older than retention window
+        String watermarkKey = PennylaneWatermark.key(flow.getId(), trigger.getId());
+        PennylaneWatermark.save(
+            conditionContext.getRunContext(),
+            flow.getNamespace(),
+            watermarkKey,
+            new PennylaneWatermark.State("2020-01-01T00:00:00Z", List.of())
+        );
+
+        Optional<Execution> executionOpt = trigger.evaluate(conditionContext, triggerContext);
+        assertThat(executionOpt.isPresent(), is(true));
+        var invoice = (io.kestra.plugin.pennylane.models.SupplierInvoice) executionOpt.get().getTrigger().getVariables().get("invoice");
+        assertThat(invoice.getId(), is(888L));
     }
 }

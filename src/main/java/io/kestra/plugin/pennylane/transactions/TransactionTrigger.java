@@ -1,39 +1,32 @@
 package io.kestra.plugin.pennylane.transactions;
 
-import io.kestra.core.http.client.configurations.HttpConfiguration;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.conditions.ConditionContext;
 import io.kestra.core.models.executions.Execution;
 import io.kestra.core.models.property.Property;
-import io.kestra.core.models.triggers.AbstractTrigger;
-import io.kestra.core.models.triggers.PollingTriggerInterface;
 import io.kestra.core.models.triggers.TriggerContext;
 import io.kestra.core.models.triggers.TriggerService;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.pennylane.AbstractPennylaneTask;
+import io.kestra.plugin.pennylane.AbstractPennylaneTrigger;
 import io.kestra.plugin.pennylane.PennylaneWatermark;
 import io.kestra.plugin.pennylane.models.Changelog;
 import io.kestra.plugin.pennylane.models.PennylaneFilter;
 import io.kestra.plugin.pennylane.models.Transaction;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
-import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 @SuperBuilder
 @ToString
@@ -45,6 +38,8 @@ import java.util.Set;
     description = "Polls GET /changelogs/transactions, then loads those transactions with an id `in` filter. " +
         "The transactions list allow-list is id, bank_account_id, journal_id, and date, so updated_at and categorized are not sent as query filters. " +
         "`categorized` is applied after fetch: the boolean is used when present, otherwise a non-empty categories array counts as categorized. " +
+        "Because the Pennylane transactions list endpoint does not support filtering by `categorized`, transactions are filtered in memory. " +
+        "Once evaluated, the watermark advances to avoid re-processing the same changelog events. If a transaction is subsequently categorized or uncategorized, Pennylane emits a new changelog event which this trigger will evaluate. " +
         "`bankAccountId` is sent as bank_account_id eq. A namespace KV watermark advances on every fully paged poll."
 )
 @Plugin(
@@ -72,31 +67,7 @@ import java.util.Set;
         )
     }
 )
-public class TransactionTrigger extends AbstractTrigger implements PollingTriggerInterface {
-
-    @Schema(
-        title = "Pennylane API token",
-        description = "Company or firm API token used to authenticate against the Pennylane API."
-    )
-    @NotNull
-    @PluginProperty(secret = true, group = "connection")
-    @ToString.Exclude
-    private Property<String> apiToken;
-
-    @Schema(
-        title = "Pennylane API base URL",
-        description = "Base endpoint URL for Pennylane API calls."
-    )
-    @Builder.Default
-    @PluginProperty(group = "connection")
-    private Property<String> baseUrl = Property.ofValue(AbstractPennylaneTask.DEFAULT_BASE_URL);
-
-    @Schema(
-        title = "HTTP client options",
-        description = "Optional HTTP client configuration (timeouts, proxy, SSL) applied to every request."
-    )
-    @PluginProperty(group = "advanced")
-    private HttpConfiguration options;
+public class TransactionTrigger extends AbstractPennylaneTrigger {
 
     @Schema(
         title = "Bank account ID filter",
@@ -113,19 +84,6 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
     )
     @PluginProperty(group = "processing")
     private Property<Boolean> categorized;
-
-    @Schema(
-        title = "Polling interval",
-        description = "How frequently to poll Pennylane for new transactions. ISO-8601 duration. Defaults to PT5M."
-    )
-    @Builder.Default
-    @PluginProperty(group = "advanced")
-    private Duration interval = Duration.ofMinutes(5);
-
-    @Override
-    public Duration getInterval() {
-        return this.interval;
-    }
 
     @Override
     public Optional<Execution> evaluate(ConditionContext conditionContext, TriggerContext context) throws Exception {
@@ -154,13 +112,15 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
             lookback
         );
 
-        List<Long> ids = new ArrayList<>();
+        // Deduplicate unseen events by id, preserving latest event order
+        Map<Long, Changelog> latestUnseen = new LinkedHashMap<>();
         for (Changelog change : sync.unseen()) {
             if (!change.deleted() && change.getId() != null) {
-                ids.add(change.getId());
+                latestUnseen.put(change.getId(), change);
             }
         }
 
+        List<Long> ids = new ArrayList<>(latestUnseen.keySet());
         Map<Long, Transaction> byId = new LinkedHashMap<>();
         for (int offset = 0; offset < ids.size(); offset += AbstractPennylaneTask.MAX_LIST_PAGE_SIZE) {
             List<Long> chunk = ids.subList(offset, Math.min(offset + AbstractPennylaneTask.MAX_LIST_PAGE_SIZE, ids.size()));
@@ -192,10 +152,9 @@ public class TransactionTrigger extends AbstractTrigger implements PollingTrigge
         }
 
         List<Transaction> matched = new ArrayList<>();
-        Set<Long> emitted = new LinkedHashSet<>();
         for (Long id : ids) {
             Transaction transaction = byId.get(id);
-            if (transaction == null || !emitted.add(id)) {
+            if (transaction == null) {
                 continue;
             }
             if (rCategorized != null && transaction.isCategorizedForFilter() != rCategorized) {

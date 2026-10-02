@@ -36,6 +36,11 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +62,8 @@ public abstract class AbstractPennylaneTask extends Task {
     public static final int MAX_LIST_PAGE_SIZE = 100;
     public static final int MAX_CHANGELOG_PAGE_SIZE = 1000;
     public static final int MAX_TRIAL_BALANCE_PAGE_SIZE = 1000;
-    private static final int MAX_PAGES = 1000;
+    public static final int CHANGELOG_RETENTION_DAYS = 28;
+    public static final int DEFAULT_MAX_PAGES = 10000;
     private static final int MAX_RETRIES = 5;
     private static final long INITIAL_BACKOFF_MS = 1000L;
     private static final long MAX_BACKOFF_MS = 30000L;
@@ -192,7 +198,11 @@ public abstract class AbstractPennylaneTask extends Task {
                 var body = response.getBody();
 
                 if (body == null || body.isBlank()) {
-                    body = responseType.isContainerType() ? "[]" : "{}";
+                    if (responseType.isContainerType()) {
+                        body = "[]";
+                    } else {
+                        throw new IllegalStateException("Empty response body received from Pennylane API for " + request.getUri());
+                    }
                 }
 
                 @SuppressWarnings("unchecked")
@@ -242,7 +252,7 @@ public abstract class AbstractPennylaneTask extends Task {
         String baseUrl,
         String path,
         Class<T> type
-    ) {
+    ) throws Exception {
         try {
             String url = join(baseUrl, path);
             return request(
@@ -252,9 +262,15 @@ public abstract class AbstractPennylaneTask extends Task {
                 HttpRequest.builder().uri(URI.create(url)).method("GET"),
                 type
             ).getBody();
-        } catch (Exception e) {
-            runContext.logger().warn("Skipping Pennylane resource {} after fetch failed: {}", path, e.getMessage());
-            return null;
+        } catch (HttpClientResponseException e) {
+            int status = e.getResponse() != null && e.getResponse().getStatus() != null
+                ? e.getResponse().getStatus().getCode()
+                : -1;
+            if (status == 404) {
+                runContext.logger().warn("Skipping deleted or missing Pennylane resource {}: HTTP 404", path);
+                return null;
+            }
+            throw e;
         }
     }
 
@@ -263,11 +279,18 @@ public abstract class AbstractPennylaneTask extends Task {
             var headers = e.getResponse().getHeaders();
             var retryAfterHeader = headers.firstValue("Retry-After");
             if (retryAfterHeader.isPresent()) {
+                String val = retryAfterHeader.get().trim();
                 try {
-                    long seconds = Long.parseLong(retryAfterHeader.get().trim());
-                    return Math.max(1000L, seconds * 1000L);
+                    long seconds = Long.parseLong(val);
+                    return Math.min(MAX_BACKOFF_MS, Math.max(1000L, seconds * 1000L));
                 } catch (NumberFormatException ignored) {
-                    // Ignore and fall back to exponential backoff
+                    try {
+                        Instant httpDate = DateTimeFormatter.RFC_1123_DATE_TIME.parse(val, Instant::from);
+                        long diffMs = Duration.between(Instant.now(), httpDate).toMillis();
+                        return Math.min(MAX_BACKOFF_MS, Math.max(1000L, diffMs));
+                    } catch (DateTimeParseException ignoredDate) {
+                        // Ignore and fall back to exponential backoff
+                    }
                 }
             }
         }
@@ -433,23 +456,70 @@ public abstract class AbstractPennylaneTask extends Task {
         String startDate = previous != null && previous.processedAt() != null && !previous.processedAt().isBlank()
             ? previous.processedAt()
             : lookbackStart;
+
+        if (startDate != null && !startDate.isBlank()) {
+            try {
+                Instant parsed = Instant.parse(startDate);
+                Instant limit = Instant.now().minus(CHANGELOG_RETENTION_DAYS, ChronoUnit.DAYS);
+                if (parsed.isBefore(limit)) {
+                    String clamped = limit.toString();
+                    runContext.logger().warn(
+                        "Pennylane changelog start_date {} is older than the {}-day retention window. Clamping to {} to prevent HTTP 422.",
+                        startDate, CHANGELOG_RETENTION_DAYS, clamped
+                    );
+                    startDate = clamped;
+                }
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+
         Map<String, String> queryParams = new LinkedHashMap<>();
         queryParams.put("limit", String.valueOf(MAX_CHANGELOG_PAGE_SIZE));
         if (startDate != null && !startDate.isBlank()) {
             queryParams.put("start_date", startDate);
         }
 
-        List<Changelog> fetched = listAll(
-            runContext,
-            options,
-            apiToken,
-            baseUrl,
-            "changelogs/" + resource,
-            queryParams,
-            Changelog.class,
-            PageMode.CHANGELOG,
-            null
-        );
+        List<Changelog> fetched;
+        try {
+            fetched = listAll(
+                runContext,
+                options,
+                apiToken,
+                baseUrl,
+                "changelogs/" + resource,
+                queryParams,
+                Changelog.class,
+                PageMode.CHANGELOG,
+                null
+            );
+        } catch (HttpClientResponseException e) {
+            int status = e.getResponse() != null && e.getResponse().getStatus() != null
+                ? e.getResponse().getStatus().getCode()
+                : -1;
+            if (status == 422 && queryParams.containsKey("start_date")) {
+                Instant fallback = Instant.now().minus(CHANGELOG_RETENTION_DAYS - 1, ChronoUnit.DAYS);
+                String fallbackStr = fallback.toString();
+                runContext.logger().warn(
+                    "Pennylane changelog rejected start_date {} with HTTP 422. Retrying with retention window fallback: {}",
+                    queryParams.get("start_date"), fallbackStr
+                );
+                queryParams.put("start_date", fallbackStr);
+                fetched = listAll(
+                    runContext,
+                    options,
+                    apiToken,
+                    baseUrl,
+                    "changelogs/" + resource,
+                    queryParams,
+                    Changelog.class,
+                    PageMode.CHANGELOG,
+                    null
+                );
+                startDate = fallbackStr;
+            } else {
+                throw e;
+            }
+        }
 
         List<Changelog> unseen = new ArrayList<>();
         for (Changelog change : fetched) {
@@ -522,10 +592,12 @@ public abstract class AbstractPennylaneTask extends Task {
         int accepted = 0;
         JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylanePage.class, itemType);
 
+        int pageLimit = maxRecords != null ? Math.max(DEFAULT_MAX_PAGES, (maxRecords / 10) + 10) : DEFAULT_MAX_PAGES;
+
         while (true) {
             pages++;
-            if (pages > MAX_PAGES) {
-                throw new IllegalStateException("Pennylane pagination exceeded " + MAX_PAGES + " pages for " + endpointPath);
+            if (pages > pageLimit) {
+                throw new IllegalStateException("Pennylane pagination exceeded " + pageLimit + " pages for " + endpointPath);
             }
 
             Map<String, String> requestParams = paramsForPage(baseParams, cursor, pageMode);
@@ -573,9 +645,10 @@ public abstract class AbstractPennylaneTask extends Task {
     ) throws Exception {
         int pageNumber = 1;
         int accepted = 0;
+        int pageLimit = maxRecords != null ? Math.max(DEFAULT_MAX_PAGES, (maxRecords / 10) + 10) : DEFAULT_MAX_PAGES;
         JavaType pageType = MAPPER.getTypeFactory().constructParametricType(PennylaneOffsetPage.class, itemType);
 
-        while (pageNumber <= MAX_PAGES) {
+        while (pageNumber <= pageLimit) {
             Map<String, String> requestParams = new LinkedHashMap<>();
             if (queryParams != null) {
                 requestParams.putAll(queryParams);
@@ -613,7 +686,7 @@ public abstract class AbstractPennylaneTask extends Task {
             }
             pageNumber++;
         }
-        throw new IllegalStateException("Pennylane offset pagination exceeded " + MAX_PAGES + " pages for " + endpointPath);
+        throw new IllegalStateException("Pennylane offset pagination exceeded " + pageLimit + " pages for " + endpointPath);
     }
 
     private static Map<String, String> paramsForPage(Map<String, String> baseParams, String cursor, PageMode pageMode) {

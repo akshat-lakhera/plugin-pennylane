@@ -202,4 +202,53 @@ class AbstractPennylaneTaskTest {
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> task.run(runContext));
         assertThat(ex.getMessage(), containsString("between 1 and 100"));
     }
+
+    @Test
+    void testFetchByIdReturnsNullOn404() throws Exception {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/999"))
+            .willReturn(aResponse().withStatus(404).withBody("{\"error\": \"Not Found\"}")));
+
+        List task = List.builder()
+            .id("test-fetch-404")
+            .type(List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        var result = AbstractPennylaneTask.fetchById(
+            runContext,
+            null,
+            "token",
+            getBaseUrl(),
+            "supplier_invoices/999",
+            io.kestra.plugin.pennylane.models.SupplierInvoice.class
+        );
+        assertThat(result, nullValue());
+    }
+
+    @Test
+    void testFetchByIdPropagates500Error() {
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/external/v2/supplier_invoices/500"))
+            .willReturn(aResponse().withStatus(500).withBody("{\"error\": \"Internal Server Error\"}")));
+
+        List task = List.builder()
+            .id("test-fetch-500")
+            .type(List.class.getName())
+            .apiToken(Property.ofValue("token"))
+            .baseUrl(Property.ofValue(getBaseUrl()))
+            .build();
+
+        RunContext runContext = TestsUtils.mockRunContext(runContextFactory, task, Map.of());
+        assertThrows(HttpClientResponseException.class, () ->
+            AbstractPennylaneTask.fetchById(
+                runContext,
+                null,
+                "token",
+                getBaseUrl(),
+                "supplier_invoices/500",
+                io.kestra.plugin.pennylane.models.SupplierInvoice.class
+            )
+        );
+    }
 }
