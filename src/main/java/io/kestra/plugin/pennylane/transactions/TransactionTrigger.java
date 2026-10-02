@@ -79,8 +79,10 @@ public class TransactionTrigger extends AbstractPennylaneTrigger {
     @Schema(
         title = "Categorized post-filter",
         description = "Applied in the plugin after the transactions are fetched, not as an API filter. " +
+            "Note: the watermark advances past evaluated changelog events regardless of whether they match this filter. " +
+            "When an existing transaction is later categorized or updated in Pennylane, a new changelog event is emitted and evaluated. " +
             "When the payload has a categorized boolean it is used. Otherwise a transaction is treated as categorized when categories is non-empty. " +
-            "There is no categorized field on the v2 transaction object; attachment_required and categories are the live signals."
+            "There is no native categorized query filter on the v2 transaction list endpoint; attachment_required and categories are the live signals."
     )
     @PluginProperty(group = "processing")
     private Property<Boolean> categorized;
